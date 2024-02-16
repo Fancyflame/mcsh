@@ -68,7 +68,7 @@ impl<'a> Atoi<'a> {
                     let cache_tag = if *export {
                         CacheTag::StaticExport(name)
                     } else {
-                        CacheTag::Regular(get_anonymous_id(&mut self.anonymous_static_pool))
+                        CacheTag::Static(get_anonymous_id(&mut self.anonymous_static_pool))
                     };
 
                     self.label_map.insert_static(cache_tag, value)?;
