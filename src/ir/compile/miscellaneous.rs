@@ -1,10 +1,10 @@
 use crate::ir::{
     compile::{compile_load_func, compile_store_func, REG_MEM_PTR},
-    to_display, BoolOperator, BoolOprRhs, Operator,
+    to_display, BoolOperator, BoolOprRhs, FormatArgument, Operator,
 };
 
 use super::{CacheTag, Ir, Label, PREFIX};
-use std::fmt::Display;
+use std::fmt::{Display, Formatter, Result as FmtResult, Write};
 
 pub(super) fn compile_ir<'a>(ir: &'a Ir) -> impl Display + 'a {
     to_display(move |output| match ir {
@@ -121,8 +121,8 @@ pub(super) fn compile_ir<'a>(ir: &'a Ir) -> impl Display + 'a {
             writeln!(output, "function {label}")
         }
 
-        Ir::CallExtern { name } => {
-            writeln!(output, "function {name}")
+        Ir::CmdRaw(name) => {
+            writeln!(output, "{name}")
         }
 
         Ir::Cond {
@@ -205,6 +205,43 @@ pub(super) fn compile_ir<'a>(ir: &'a Ir) -> impl Display + 'a {
         }
 
         Ir::SimulationAbort => Ok(()),
+
+        Ir::PrintFmt { args, target } => {
+            let mut printer = Printer::new(output, target)?;
+
+            for arg in args {
+                match arg {
+                    FormatArgument::CacheTag(ct) => {
+                        printer.flush()?;
+                        write!(
+                            printer.output,
+                            r#"{{ \
+                                "score": {{ \
+                                    "name": "MCSH", \
+                                    "objective": "{}" \
+                                }} \
+                            }}"#,
+                            compile_cache_tag(*ct)
+                        )?;
+                    }
+                    FormatArgument::ConstInt(int) => {
+                        write!(printer.buffer, "{int}")?;
+                    }
+                    FormatArgument::Selector(sel) => {
+                        printer.flush()?;
+                        write!(printer.output, r#"{{ "selector": "{sel}" }}"#)?;
+                    }
+                    FormatArgument::Style(style) => {
+                        write!(printer.buffer, "§{}", style.code())?;
+                    }
+                    FormatArgument::Text(t) => {
+                        write!(printer.buffer, "{t}")?;
+                    }
+                }
+            }
+
+            printer.end()
+        }
     })
 }
 
@@ -230,4 +267,42 @@ pub(super) fn compile_label<'a>(label: &'a Label, with_dir: bool) -> impl Displa
             }
         }
     })
+}
+
+struct Printer<'a, 'f> {
+    is_first: bool,
+    buffer: String,
+    output: &'a mut Formatter<'f>,
+}
+
+impl<'a, 'f> Printer<'a, 'f> {
+    fn new(output: &'a mut Formatter<'f>, target: &str) -> Result<Self, std::fmt::Error> {
+        write!(output, r#"tellraw {target} {{ "rawtext":[ "#)?;
+        Ok(Printer {
+            is_first: false,
+            buffer: String::new(),
+            output,
+        })
+    }
+
+    fn flush(&mut self) -> FmtResult {
+        write!(self.output, r#"{{ "text": "{}" }}"#, self.buffer)?;
+        self.buffer.clear();
+        Ok(())
+    }
+
+    fn push_comma(&mut self) -> FmtResult {
+        if self.is_first {
+            self.is_first = false;
+        } else {
+            write!(self.output, ", ")?;
+        }
+        Ok(())
+    }
+
+    fn end(mut self) -> FmtResult {
+        self.flush();
+        write!(self.output, " ] }}")?;
+        Ok(())
+    }
 }

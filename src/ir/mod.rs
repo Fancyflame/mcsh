@@ -5,9 +5,12 @@ use std::{
 
 use anyhow::{anyhow, Result};
 
+use self::format::FormatStyle;
+
 const PREFIX: &str = "__MCSH_Private";
 
 pub mod compile;
+pub mod format;
 pub mod simulate;
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
@@ -90,7 +93,7 @@ impl<'a> LabelMap<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Ir<'a> {
     Assign {
         dst: CacheTag<'a>,
@@ -99,9 +102,7 @@ pub enum Ir<'a> {
     Call {
         label: Label<'a>,
     },
-    CallExtern {
-        name: &'a str,
-    },
+    CmdRaw(&'a str),
     Increase {
         dst: CacheTag<'a>,
         value: i32,
@@ -138,7 +139,20 @@ pub enum Ir<'a> {
         max: i32,
         min: i32,
     },
+    PrintFmt {
+        target: String,
+        args: Vec<FormatArgument<'a>>,
+    },
     SimulationAbort,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum FormatArgument<'a> {
+    Text(&'a str),
+    CacheTag(CacheTag<'a>),
+    ConstInt(i32),
+    Style(FormatStyle),
+    Selector(&'a str),
 }
 
 #[derive(Clone, Copy, Debug)]

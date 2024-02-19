@@ -7,6 +7,7 @@ use self::{
 
 pub use parse_file::parse_file;
 
+pub mod entity_selector;
 pub mod error;
 pub mod lexer;
 pub mod parse_file;
@@ -23,7 +24,6 @@ pub enum Definition<'a> {
 
 #[derive(Clone, Debug)]
 pub struct ItemConstant<'a> {
-    pub export: bool,
     pub name: &'a str,
     pub expr: Expr<'a>,
 }
@@ -48,6 +48,7 @@ pub enum Stmt<'a> {
     Expr(Expr<'a>),
     Swap(StmtSwap<'a>),
     Debugger,
+    MacroCall(MacroCall<'a>),
 }
 
 #[derive(Clone, Debug)]
@@ -57,6 +58,9 @@ pub enum Expr<'a> {
     Binary(ExprBinary<'a>),
     Unary(ExprUnary<'a>),
     Call(ExprFnCall<'a>),
+    Str(&'a str),
+    Block(ExprBlock<'a>),
+    MacroCall(MacroCall<'a>),
 }
 
 #[derive(Clone, Debug)]
@@ -111,6 +115,18 @@ pub struct ExprBinary<'a> {
     pub bin_op: Punct,
     pub lhs: Box<Expr<'a>>,
     pub rhs: Box<Expr<'a>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExprBlock<'a> {
+    pub stmts: Vec<Stmt<'a>>,
+    pub ret: Box<Expr<'a>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct MacroCall<'a> {
+    pub name: &'a str,
+    pub tokens: Lexer<'a>,
 }
 
 #[derive(Clone, Debug)]

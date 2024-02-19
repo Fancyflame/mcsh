@@ -1,11 +1,11 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fs::{self, File},
     io::{self, Write},
     path::Path,
 };
 
-use super::{CacheTag, Ir, Label, LabelInfo, LabelMap, PREFIX};
+use super::{CacheTag, Ir, Label, LabelMap, PREFIX};
 use anyhow::{anyhow, Result};
 use memory::*;
 use miscellaneous::*;

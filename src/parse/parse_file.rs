@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 use nom::{
     branch::alt,
     combinator::{eof, map, opt, value, verify},
@@ -8,9 +8,12 @@ use nom::{
 };
 
 use super::{
-    lexer::{group, ident, integer, keyword, punct, specified_punct, Delimiter, Lexer, Punct},
-    Block, Definition, Expr, ExprFnCall, ExprUnary, IResult, ItemConstant, ItemFn, ItemStatic,
-    Stmt, StmtAssign, StmtIf, StmtReturn, StmtSwap, StmtWhile,
+    lexer::{
+        group, ident, integer, keyword, punct, specified_punct, string, Delimiter, Lexer, Punct,
+        Token,
+    },
+    Block, Definition, Expr, ExprBlock, ExprFnCall, ExprUnary, IResult, ItemConstant, ItemFn,
+    ItemStatic, MacroCall, Stmt, StmtAssign, StmtIf, StmtReturn, StmtSwap, StmtWhile,
 };
 
 #[cfg(debug_assertions)]
@@ -31,25 +34,52 @@ pub fn parse_file(file: &str) -> anyhow::Result<Vec<Definition>> {
     Ok(vec)
 }
 
+pub fn to_anyhow_result<O>(r: IResult<O>) -> Result<O> {
+    match r {
+        Ok((lexer, output)) => match lexer.peek() {
+            Token::Eof => Ok(output),
+            other => Err(anyhow!("unexpected token `{other}`")),
+        },
+        Err(e) => Err(anyhow!("an error occurred on parsing: {e}")),
+    }
+}
+
+pub fn parse_macro(input: Lexer) -> IResult<MacroCall> {
+    map(
+        separated_pair(
+            ident,
+            specified_punct(Punct::Bang),
+            alt((
+                group(Delimiter::Bracket),
+                group(Delimiter::Paren),
+                group(Delimiter::Brace),
+            )),
+        ),
+        |(name, tokens)| MacroCall { name, tokens },
+    )(input)
+}
+
 pub fn parse_definition(input: Lexer) -> IResult<Definition> {
-    let parse_const_bind = |kw| {
+    let parse_const = map(
         tuple((
-            map(opt(keyword("pub")), |o| o.is_some()),
-            keyword(kw),
+            keyword("const"),
             ident,
             specified_punct(Punct::Equal),
             parse_expr,
             specified_punct(Punct::Semi),
-        ))
-    };
-
-    let parse_const = map(
-        parse_const_bind("const"),
-        |(export, _, name, _, expr, _)| Definition::Constant(ItemConstant { export, name, expr }),
+        )),
+        |(_, name, _, expr, _)| Definition::Constant(ItemConstant { name, expr }),
     );
 
     let parse_static = map(
-        parse_const_bind("static"),
+        tuple((
+            map(opt(keyword("export")), |o| o.is_some()),
+            keyword("static"),
+            ident,
+            specified_punct(Punct::Equal),
+            parse_expr,
+            specified_punct(Punct::Semi),
+        )),
         |(export, _, name, _, expr, _)| Definition::Static(ItemStatic { export, name, expr }),
     );
 
@@ -63,7 +93,7 @@ pub fn parse_definition(input: Lexer) -> IResult<Definition> {
 pub fn parse_item_fn(input: Lexer) -> IResult<ItemFn> {
     map(
         pair(
-            map(opt(keyword("pub")), |o| o.is_some()),
+            map(opt(keyword("export")), |o| o.is_some()),
             preceded(
                 keyword("fn"),
                 tuple((
@@ -91,7 +121,7 @@ pub fn parse_stmts(input: Lexer) -> IResult<Block> {
         .parse(input)
 }
 
-fn one_kw_parser<'a>(
+fn kw_stmt_parser<'a>(
     val: Stmt<'a>,
     kw: &'static str,
 ) -> impl FnMut(Lexer<'a>) -> IResult<'a, Stmt<'a>> {
@@ -136,11 +166,6 @@ pub fn parse_stmt(input: Lexer) -> IResult<Stmt> {
         )
     };
 
-    let parse_yield = one_kw_parser(Stmt::Yield, "yield");
-    let parse_break = one_kw_parser(Stmt::Break, "break");
-    let parse_continue = one_kw_parser(Stmt::Continue, "continue");
-    let parse_debugger = one_kw_parser(Stmt::Debugger, "debugger");
-
     let parse_swap = map(
         terminated(
             separated_pair(ident, specified_punct(Punct::Swap), ident),
@@ -164,17 +189,21 @@ pub fn parse_stmt(input: Lexer) -> IResult<Stmt> {
     );
 
     alt((
+        kw_stmt_parser(Stmt::Yield, "yield"),
+        kw_stmt_parser(Stmt::Break, "break"),
+        kw_stmt_parser(Stmt::Continue, "continue"),
+        kw_stmt_parser(Stmt::Debugger, "debugger"),
         parse_block,
         parse_let,
         parse_while,
         parse_if,
-        parse_yield,
-        parse_break,
-        parse_continue,
-        parse_debugger,
         parse_return,
         parse_swap,
         parse_stmt_expr,
+        map(
+            terminated(parse_macro, specified_punct(Punct::Semi)),
+            Stmt::MacroCall,
+        ),
     ))(input)
 }
 
@@ -188,9 +217,21 @@ pub fn parse_expr(input: Lexer) -> IResult<Expr> {
 }
 
 fn parse_atomic_expr(input: Lexer) -> IResult<Expr> {
+    let parse_expr_block = map(
+        group(Delimiter::Brace).and_then(terminated(pair(many0(parse_stmt), parse_expr), eof)),
+        |(stmts, ret)| {
+            Expr::Block(ExprBlock {
+                stmts,
+                ret: Box::new(ret),
+            })
+        },
+    );
+
     let atomic_expr = alt((
         group(Delimiter::Paren).and_then(parse_expr),
+        parse_expr_block,
         map(integer, Expr::Integer),
+        map(string, Expr::Str),
         map(
             pair(
                 ident,
@@ -202,6 +243,7 @@ fn parse_atomic_expr(input: Lexer) -> IResult<Expr> {
             |(name, args)| Expr::Call(ExprFnCall { name, args }),
         ),
         map(ident, Expr::Var),
+        map(parse_macro, Expr::MacroCall),
     ));
 
     alt((

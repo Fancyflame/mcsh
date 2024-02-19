@@ -5,9 +5,9 @@ use std::{
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag, take_until},
-    character::complete::{self, alpha1, alphanumeric1, multispace0},
-    combinator::{map, opt, recognize, value},
+    bytes::complete::{escaped, is_not, tag, take_until},
+    character::complete::{self, alpha1, alphanumeric1, multispace0, one_of},
+    combinator::{fail, map, opt, recognize, value},
     multi::{many0, many0_count},
     sequence::{delimited, pair, preceded, terminated, tuple},
     IResult,
@@ -56,11 +56,11 @@ macro_rules! punct {
         }
 
         fn parse_punct(input: &str) -> IResult<&str, Punct> {
-            alt((
-                $(
-                    value(Punct::$Punct, tag($display)),
-                )*
-            ))(input)
+            $(if let r @ Ok(_) = value(Punct::$Punct, tag($display))(input) {
+                r
+            } else)* {
+                fail(input)
+            }
         }
     };
 }
@@ -73,6 +73,7 @@ punct! {
     And2 "&&",
     Or2 "||",
     Swap "><",
+    Dot2 "..",
     Equal "=",
     Plus "+",
     Minus "-",
@@ -85,6 +86,8 @@ punct! {
     LessThan "<",
     GreaterThan ">",
     Bang "!",
+    At "@",
+    Pound "#",
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -118,7 +121,7 @@ fn parse_ident(input: &str) -> IResult<&str, &str> {
 fn parse_str(input: &str) -> IResult<&str, &str> {
     delimited(
         tag("\""),
-        recognize(many0_count(alt((tag("\\\""), is_not("\"\r\n"))))),
+        escaped(is_not("\\\"\r\n"), '\\', one_of(r#""\"#)),
         tag("\""),
     )(input)
 }
@@ -186,15 +189,19 @@ impl Delimiter {
     }
 }
 
-impl Display for Delimiter {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.display().fmt(f)
-    }
-}
-
 impl Display for Group<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.delimiter.fmt(f)
+        let (start, end) = match self.delimiter {
+            Delimiter::Paren => ("(", ")"),
+            Delimiter::Bracket => ("[", "]"),
+            Delimiter::Brace => ("{", "}"),
+        };
+
+        write!(f, "{start} ")?;
+        for t in self.content.iter() {
+            write!(f, "{t}")?;
+        }
+        write!(f, "{end}")
     }
 }
 

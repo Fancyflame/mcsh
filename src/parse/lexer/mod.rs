@@ -130,7 +130,7 @@ pub fn integer(input: Lexer) -> IResult<i32> {
     }
 }
 
-pub fn str(input: Lexer) -> IResult<&str> {
+pub fn string(input: Lexer) -> IResult<&str> {
     let p = input.peek();
     if let Token::Literal(Literal::Str(s)) = p {
         input.step(1);

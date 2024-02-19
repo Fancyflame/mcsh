@@ -1,14 +1,16 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use crate::{
-    ir::{CacheTag, Ir, Label, LabelInfo, Operator},
-    parse::ItemFn,
+    ir::{BoolOperator, CacheTag, Ir, Label, LabelInfo, Operator},
+    parse::{lexer::Punct, ItemFn},
 };
 
 use self::read_stmt::ReadStmtWorkflow;
 
 use super::{get_fn_label, Atoi, Binding, FuncDef};
 
+mod macros;
+mod read_def;
 mod read_expr;
 mod read_stmt;
 
@@ -21,30 +23,45 @@ pub(super) const CONST_MINUS_ONE: CacheTag = CacheTag::StaticBuiltin("MinusOne")
 const REG_PARENT_MEM_OFFSET: CacheTag = CacheTag::Regular(0);
 
 impl<'a> Atoi<'a> {
-    pub fn insert_fn(&mut self, item_fn: &ItemFn<'a>) -> Result<()> {
+    pub fn insert_fn(
+        &mut self,
+        item_fn @ ItemFn {
+            export,
+            name,
+            args,
+            body,
+        }: &ItemFn<'a>,
+    ) -> Result<()> {
         self.bindings.delimite();
         let mut info = self.new_label();
 
-        if item_fn.export {
+        if *export {
+            if args.len() != 0 {
+                return Err(anyhow!(
+                    "cannot export function `{name}` because \
+                    it must takes no arguments",
+                ));
+            }
             self.insert_entry_fn(get_fn_label(item_fn), info.label)?;
         }
 
         self.functions.push(
-            item_fn.name,
+            name,
             FuncDef {
                 label: info.label,
-                arg_count: item_fn.args.len() as _,
+                arg_count: args.len() as _,
             },
         );
 
         let mut cache_offset = FRAME_HEAD_LENGTH;
 
-        for arg in item_fn.args.iter().copied() {
+        for arg in args.iter().copied() {
             self.bindings
                 .push(arg, Binding::Cache(CacheTag::Regular(cache_offset)));
             cache_offset += 1;
         }
 
+        // 返回值默认为0
         info.insts.push(Ir::Assign {
             dst: REG_RETURNED_VALUE,
             value: 0,
@@ -56,7 +73,7 @@ impl<'a> Atoi<'a> {
             cache_offset,
         };
 
-        for stmt in &item_fn.body {
+        for stmt in body {
             self.read_stmt(stmt, &mut wf)?;
         }
         self.bindings.pop_block();
@@ -88,4 +105,31 @@ impl<'a> Atoi<'a> {
         ];
         self.label_map.insert_label(info)
     }
+}
+
+pub(super) fn convert_opr(p: &Punct) -> Option<Operator> {
+    let opr = match p {
+        Punct::Plus => Operator::Add,
+        Punct::Minus => Operator::Sub,
+        Punct::Star => Operator::Mul,
+        Punct::Slash => Operator::Div,
+        Punct::Percent => Operator::Rem,
+        _ => return None,
+    };
+    Some(opr)
+}
+
+pub(super) fn convert_bool_opr(p: &Punct) -> Option<BoolOperator> {
+    let opr = match p {
+        Punct::GreaterThan => BoolOperator::Gt,
+        Punct::LessThan => BoolOperator::Lt,
+        Punct::GreaterEq => BoolOperator::Ge,
+        Punct::LessEq => BoolOperator::Le,
+        Punct::Equal2 => BoolOperator::Equal,
+        Punct::NotEq => BoolOperator::NotEqual,
+        Punct::And2 => BoolOperator::And,
+        Punct::Or2 => BoolOperator::Or,
+        _ => return None,
+    };
+    Some(opr)
 }

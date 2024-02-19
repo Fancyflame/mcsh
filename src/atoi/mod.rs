@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Ok, Result};
 
 use crate::{
-    ir::{CacheTag, Label, LabelInfo, LabelMap},
-    parse::{Definition, Expr, ItemConstant, ItemFn, ItemStatic},
+    ir::{BoolOperator, CacheTag, Label, LabelInfo, LabelMap, Operator},
+    parse::{Definition, ItemFn},
 };
 
 use self::{
@@ -13,9 +13,10 @@ use self::{
 mod core;
 mod stack;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Binding<'a> {
     Constant(i32),
+    String(&'a str),
     Cache(CacheTag<'a>),
 }
 
@@ -56,33 +57,7 @@ impl<'a> Atoi<'a> {
 
     pub fn parse(&mut self, defs: &[Definition<'a>]) -> Result<()> {
         for def in defs {
-            match def {
-                Definition::Constant(ItemConstant { name, expr, .. }) => {
-                    self.bindings
-                        .push(name, Binding::Constant(constant_calculate(expr)?));
-                }
-
-                Definition::Static(ItemStatic { name, expr, export }) => {
-                    let value = constant_calculate(expr)?;
-
-                    let cache_tag = if *export {
-                        CacheTag::StaticExport(name)
-                    } else {
-                        CacheTag::Static(get_anonymous_id(&mut self.anonymous_static_pool))
-                    };
-
-                    self.label_map.insert_static(cache_tag, value)?;
-                    self.bindings.push(name, Binding::Cache(cache_tag));
-                }
-
-                Definition::Function(item_fn) => self.functions.push(
-                    item_fn.name,
-                    FuncDef {
-                        label: get_fn_label(item_fn),
-                        arg_count: item_fn.args.len() as _,
-                    },
-                ),
-            }
+            self.read_def(def)?;
         }
 
         for def in defs {
@@ -115,15 +90,40 @@ fn get_anonymous_id(pool: &mut u32) -> u32 {
 }
 
 fn variable_not_found(var: &str) -> anyhow::Error {
-    anyhow!("variable `{var}` not found")
+    anyhow!("identifier `{var}` is not defined")
 }
 
-fn constant_calculate(expr: &Expr) -> Result<i32> {
-    if let Expr::Integer(value) = expr {
-        Ok(*value)
+fn no_string_error() -> anyhow::Error {
+    anyhow!("string can only be used in constant and macro definition")
+}
+
+pub fn calculate_arithmetical_bin_expr(lhs: i32, rhs: i32, opr: Operator) -> i32 {
+    match opr {
+        Operator::Add => lhs + rhs,
+        Operator::Sub => lhs - rhs,
+        Operator::Mul => lhs * rhs,
+        Operator::Div => lhs / rhs,
+        Operator::Rem => lhs % rhs,
+        Operator::Max => lhs.max(rhs),
+        Operator::Min => lhs.min(rhs),
+        Operator::Set | Operator::Swp => panic!("set or swap operation is invalid"),
+    }
+}
+
+pub fn calculate_bool_bin_expr(lhs: i32, rhs: i32, opr: BoolOperator) -> i32 {
+    let r = match opr {
+        BoolOperator::And => (lhs != 0) && (rhs != 0),
+        BoolOperator::Or => (lhs != 0) || (rhs != 0),
+        BoolOperator::Equal => lhs == rhs,
+        BoolOperator::Ge => lhs >= rhs,
+        BoolOperator::Gt => lhs > rhs,
+        BoolOperator::Le => lhs <= rhs,
+        BoolOperator::Lt => lhs < rhs,
+        BoolOperator::NotEqual => lhs != rhs,
+    };
+    if r {
+        1
     } else {
-        Err(anyhow!(
-            "given expression cannot be considered as constant value"
-        ))
+        0
     }
 }

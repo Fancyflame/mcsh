@@ -9,18 +9,19 @@ mod parse;
 
 fn main() {
     let defs = parse_file(
-        "
+        r#"
     // start of file
 
-    const FOO = 12;
+    const FOO = -(12 + 32);
+    const BAR = "hello woo\"\\gee";
 
     fn call(a, b) {
         return a+b;
     }
 
-    pub fn test(lhs, rhs) {
-        let a = -20;
-        let b = 30;
+    export fn test() {
+        let a = -6;
+        let b = FOO;
 
         if !(1 != 2 + 2) {
             call(1 + 1, 2*7);
@@ -30,18 +31,21 @@ fn main() {
             // 一个中文注释
         }
 
-        while a < 5 {
+        print!(@a[tag = !aa], "I {#bold}HAVE {b} {#reset}{#red}APPLES!!!");
+        //print!(@a[tag = !aa], "I APPLES!!!");
+
+        /*while a < 5 {
             a = a+1;
             if a > 35 {
                 continue;
             }
             b=b+1;
-        }
+        }*/
 
         a >< b;
         return call(a, b);
     }
-    ",
+    "#,
     )
     .unwrap();
 

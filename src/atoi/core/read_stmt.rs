@@ -3,10 +3,16 @@ use anyhow::{anyhow, Result};
 use crate::{
     atoi::{get_anonymous_id, variable_not_found, Atoi, Binding},
     ir::{BoolOperator, BoolOprRhs, CacheTag, Ir, Label, LabelInfo, Operator},
-    parse::{Expr, Stmt, StmtAssign, StmtIf, StmtReturn, StmtSwap, StmtWhile},
+    parse::{
+        parse_file::{parse_stmt, to_anyhow_result},
+        Expr, MacroCall, Stmt, StmtAssign, StmtIf, StmtReturn, StmtSwap, StmtWhile,
+    },
 };
 
-use super::{REG_COND_ENABLE, REG_CURRENT_MEM_OFFSET, REG_PARENT_MEM_OFFSET, REG_RETURNED_VALUE};
+use super::{
+    macros::macro_not_found, REG_COND_ENABLE, REG_CURRENT_MEM_OFFSET, REG_PARENT_MEM_OFFSET,
+    REG_RETURNED_VALUE,
+};
 
 pub(super) struct ReadStmtWorkflow<'a> {
     pub label: Option<LabelInfo<'a>>,
@@ -31,7 +37,7 @@ impl<'a> ReadStmtWorkflow<'a> {
 }
 
 impl<'a> Atoi<'a> {
-    fn read_block(&mut self, stmts: &Vec<Stmt<'a>>, wf: &mut ReadStmtWorkflow<'a>) -> Result<()> {
+    fn read_block(&mut self, stmts: &[Stmt<'a>], wf: &mut ReadStmtWorkflow<'a>) -> Result<()> {
         self.bindings.delimite();
         for stmt in stmts {
             if wf.label.is_none() {
@@ -45,7 +51,7 @@ impl<'a> Atoi<'a> {
 
     fn read_arm(
         &mut self,
-        stmts: &Vec<Stmt<'a>>,
+        stmts: &[Stmt<'a>],
         branch_end: Label<'a>,
         wf: &mut ReadStmtWorkflow<'a>,
     ) -> Result<Label<'a>> {
@@ -79,7 +85,7 @@ impl<'a> Atoi<'a> {
         };
 
         match bind {
-            Binding::Constant(_) => Err(anyhow!(
+            Binding::Constant(_) | Binding::String(_) => Err(anyhow!(
                 "cannot assign value to a constant identifier `{name}`"
             )),
             Binding::Cache(cache_tag) => Ok(*cache_tag),
@@ -99,6 +105,9 @@ impl<'a> Atoi<'a> {
             }) => {
                 if *is_bind {
                     let result = wf.read_expr(self, expr)?;
+                    if self.bindings.has_sibling_namesake(name) {
+                        return Err(anyhow!("identifier `{name}` has been defined"));
+                    }
                     self.bindings.push(name, Binding::Cache(result));
                 } else {
                     let dst = self.find_variable(name)?;
@@ -194,8 +203,11 @@ impl<'a> Atoi<'a> {
                     });
                 }
 
-                static EMPTY_BLOCK: Vec<Stmt<'static>> = Vec::new();
-                let default_block = default.as_ref().unwrap_or(&EMPTY_BLOCK);
+                let default_block = match default {
+                    Some(vec) => &**vec,
+                    None => &[],
+                };
+
                 let default_label = self.read_arm(default_block, branch_end.label, wf)?;
                 wf.insts().push(Ir::Cond {
                     positive: true,
@@ -251,6 +263,18 @@ impl<'a> Atoi<'a> {
 
             Stmt::Debugger => {
                 wf.insts().push(Ir::SimulationAbort);
+            }
+
+            Stmt::MacroCall(m @ MacroCall { name, tokens }) => {
+                if let Some(lexer) = self.call_macro(m) {
+                    return self.read_stmt(&to_anyhow_result(parse_stmt(lexer))?, wf);
+                }
+
+                match *name {
+                    "run" => Self::macro_run(wf.insts(), tokens.clone()),
+                    "print" => self.macro_print(wf.insts(), tokens.clone()),
+                    _ => return Err(macro_not_found(name)),
+                }?;
             }
         }
 

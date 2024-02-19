@@ -1,3 +1,4 @@
+#[derive(Clone, Debug)]
 pub(super) struct UnsizedStack<'a, T> {
     items: Vec<(&'a str, T)>,
     block_indexes: Vec<usize>,
@@ -28,6 +29,11 @@ impl<'a, T> UnsizedStack<'a, T> {
             .rev()
             .find(|(t, _)| *t == tag)
             .map(|(_, item)| item)
+    }
+
+    pub fn has_sibling_namesake(&self, tag: &str) -> bool {
+        let start = self.block_indexes.last().copied().unwrap_or_default();
+        self.items[start..].iter().any(|(t, _)| *t == tag)
     }
 
     pub fn pop_block(&mut self) {

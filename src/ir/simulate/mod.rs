@@ -7,9 +7,12 @@ use std::{
 use anyhow::{anyhow, Result};
 use rand::{rngs::ThreadRng, Rng};
 
-use crate::ir::OperatorAsDisplay;
+use crate::{
+    atoi::{calculate_arithmetical_bin_expr, calculate_bool_bin_expr},
+    ir::{FormatArgument, OperatorAsDisplay},
+};
 
-use super::{to_display, BoolOperator, BoolOprRhs, CacheTag, Ir, Label, LabelMap, Operator};
+use super::{to_display, BoolOprRhs, CacheTag, Ir, Label, LabelMap, Operator};
 
 #[must_use]
 pub struct SimulateResult {
@@ -21,7 +24,7 @@ struct SimulateMachine<'a> {
     label_map: &'a LabelMap<'a>,
     memory: Vec<Option<i32>>,
     registers: HashMap<CacheTag<'a>, i32>,
-    rest_ir: Vec<Ir<'a>>,
+    rest_ir: Vec<&'a Ir<'a>>,
     log: String,
     rng: ThreadRng,
 }
@@ -38,7 +41,7 @@ impl<'a> SimulateMachine<'a> {
         }
     }
 
-    fn run(&mut self, label: &Label) -> Result<()> {
+    fn run(&mut self, label: &Label<'a>) -> Result<()> {
         self.memory.fill(None);
         self.registers.clear();
         self.rest_ir.clear();
@@ -90,12 +93,12 @@ impl<'a> SimulateMachine<'a> {
         }
     }
 
-    fn call(&mut self, label: &Label) -> Result<()> {
+    fn call(&mut self, label: &Label<'a>) -> Result<()> {
         let Some(info) = self.label_map.label_map.get(label) else {
             return Err(anyhow!("cannot call `{label:?}` as it is not defined"));
         };
 
-        self.rest_ir.extend(info.insts.iter().rev().copied());
+        self.rest_ir.extend(info.insts.iter().rev());
         Ok(())
     }
 
@@ -123,7 +126,7 @@ impl<'a> SimulateMachine<'a> {
         Ok(start..end)
     }
 
-    fn eval(&mut self, ir: Ir<'a>) -> Result<()> {
+    fn eval(&mut self, ir: &Ir<'a>) -> Result<()> {
         macro_rules! log {
             ($($tt:tt)*) => {
                 writeln!(self.log, $($tt)*).unwrap()
@@ -133,28 +136,19 @@ impl<'a> SimulateMachine<'a> {
         match ir {
             Ir::Assign { dst, value } => {
                 let lhs_old = self.display_value(&dst);
-                self.registers.insert(dst, value);
+                self.registers.insert(*dst, *value);
                 log!("{dst:?} = {value} ({lhs_old} -> {value})");
             }
 
             Ir::BoolOperation { dst, lhs, opr, rhs } => {
                 let rhs_val = match rhs {
                     BoolOprRhs::CacheTag(ct) => self.read_value(&ct)?,
-                    BoolOprRhs::Constant(val) => val,
+                    BoolOprRhs::Constant(val) => *val,
                 };
                 let lhs_val = self.read_value(&lhs)?;
 
-                let result = match opr {
-                    BoolOperator::And => (lhs_val != 0) && (rhs_val != 0),
-                    BoolOperator::Equal => lhs_val == rhs_val,
-                    BoolOperator::Ge => lhs_val >= rhs_val,
-                    BoolOperator::Gt => lhs_val > rhs_val,
-                    BoolOperator::Le => lhs_val <= rhs_val,
-                    BoolOperator::Lt => lhs_val < rhs_val,
-                    BoolOperator::NotEqual => lhs_val != rhs_val,
-                    BoolOperator::Or => (lhs_val != 0) || (rhs_val != 0),
-                };
-                self.registers.insert(dst, if result { 1 } else { 0 });
+                self.registers
+                    .insert(*dst, calculate_bool_bin_expr(lhs_val, rhs_val, *opr));
 
                 log!("{dst:?} = {lhs:?} {opr} {rhs:?} (lhs = {lhs_val}, rhs = {rhs_val})");
             }
@@ -164,8 +158,8 @@ impl<'a> SimulateMachine<'a> {
                 log!("call {label:?}");
             }
 
-            Ir::CallExtern { name } => {
-                log!("call external function `{name}`");
+            Ir::CmdRaw(name) => {
+                log!("raw function `{name}`");
             }
 
             Ir::Cond {
@@ -185,7 +179,7 @@ impl<'a> SimulateMachine<'a> {
 
                 log!(
                     "if{} {cond:?} then {then:?} (cond = {cond_val})",
-                    if positive { "" } else { " not" }
+                    if *positive { "" } else { " not" }
                 );
             }
 
@@ -195,7 +189,7 @@ impl<'a> SimulateMachine<'a> {
             }
 
             Ir::Load { mem_offset, size } => {
-                let range = self.get_mem_slice(mem_offset, size)?;
+                let range = self.get_mem_slice(*mem_offset, *size)?;
                 let mem = &self.memory[range.clone()];
 
                 for (index, src) in mem.into_iter().enumerate() {
@@ -230,7 +224,7 @@ impl<'a> SimulateMachine<'a> {
                 let rhs = self.read_value(&src)?;
                 let lhs_old = self.display_value(&dst);
                 log!("{dst:?} = {src:?} ({lhs_old} -> {rhs})");
-                self.registers.insert(dst, rhs);
+                self.registers.insert(*dst, rhs);
             }
 
             Ir::Operation { dst, opr, src } => {
@@ -239,18 +233,11 @@ impl<'a> SimulateMachine<'a> {
                 let lhs_value = *lhs;
 
                 match opr {
-                    Operator::Add => *lhs += rhs,
-                    Operator::Div => *lhs /= rhs,
-                    Operator::Max => *lhs = (*lhs).max(rhs),
-                    Operator::Min => *lhs = (*lhs).min(rhs),
-                    Operator::Mul => *lhs *= rhs,
-                    Operator::Rem => *lhs %= rhs,
-                    Operator::Set => unreachable!(),
-                    Operator::Sub => *lhs -= rhs,
                     Operator::Swp => {
                         *lhs = rhs;
                         *self.get_value_mut(&src).unwrap() = lhs_value;
                     }
+                    _ => *lhs = calculate_arithmetical_bin_expr(*lhs, rhs, *opr),
                 }
 
                 match opr.as_display() {
@@ -264,14 +251,15 @@ impl<'a> SimulateMachine<'a> {
             }
 
             Ir::Random { dst, max, min } => {
+                let (max, min) = (*max, *min);
                 let value = self.rng.gen_range(min..=max);
                 let lhs_old = self.display_value(&dst);
-                self.registers.insert(dst, value);
+                self.registers.insert(*dst, value);
                 log!("{dst:?} = random {min}..{max} ({lhs_old} -> {value})");
             }
 
             Ir::Store { mem_offset, size } => {
-                let range = self.get_mem_slice(mem_offset, size)?;
+                let range = self.get_mem_slice(*mem_offset, *size)?;
                 let mem = &mut self.memory[range.clone()];
 
                 for (index, dst) in mem.into_iter().enumerate() {
@@ -289,6 +277,22 @@ impl<'a> SimulateMachine<'a> {
             Ir::SimulationAbort => {
                 log!("simulation abort");
                 return Err(anyhow!("simulation was aborted by pause command"));
+            }
+
+            Ir::PrintFmt { args, target } => {
+                let mut string = format!("print to `{target}`: ");
+                for arg in args {
+                    match arg {
+                        FormatArgument::CacheTag(ct) => {
+                            write!(string, "{}", self.read_value(ct)?).unwrap()
+                        }
+                        FormatArgument::ConstInt(int) => write!(string, "{int}").unwrap(),
+                        FormatArgument::Selector(sel) => write!(string, "(SEL: {sel})").unwrap(),
+                        FormatArgument::Style(_) => {}
+                        FormatArgument::Text(t) => string.push_str(&t),
+                    }
+                }
+                log!("{string}")
             }
         }
         Ok(())

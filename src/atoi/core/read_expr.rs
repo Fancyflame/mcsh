@@ -1,14 +1,18 @@
 use anyhow::{anyhow, Result};
 
 use crate::{
-    atoi::{get_anonymous_id, variable_not_found, Atoi, Binding},
+    atoi::{get_anonymous_id, no_string_error, variable_not_found, Atoi, Binding},
     ir::{BoolOperator, BoolOprRhs, CacheTag, Ir, Operator},
-    parse::{lexer::Punct, Expr, ExprBinary, ExprFnCall, ExprUnary},
+    parse::{
+        lexer::Punct,
+        parse_file::{parse_expr, to_anyhow_result},
+        Expr, ExprBinary, ExprBlock, ExprFnCall, ExprUnary,
+    },
 };
 
 use super::{
-    CONST_MINUS_ONE, FRAME_HEAD_LENGTH, REG_CURRENT_MEM_OFFSET, REG_PARENT_MEM_OFFSET,
-    REG_RETURNED_VALUE,
+    convert_bool_opr, convert_opr, macros::macro_not_found, CONST_MINUS_ONE, FRAME_HEAD_LENGTH,
+    REG_CURRENT_MEM_OFFSET, REG_PARENT_MEM_OFFSET, REG_RETURNED_VALUE,
 };
 
 fn new_reg(cache_offset: &mut u32) -> CacheTag<'static> {
@@ -16,7 +20,7 @@ fn new_reg(cache_offset: &mut u32) -> CacheTag<'static> {
 }
 
 impl<'a> Atoi<'a> {
-    pub(super) fn read_expr_at_next_reg(
+    pub fn read_expr_at_next_reg(
         &mut self,
         expr: &Expr<'a>,
         insts: &mut Vec<Ir<'a>>,
@@ -39,6 +43,27 @@ impl<'a> Atoi<'a> {
                 insts.push(Ir::Assign { dst, value: *value });
             }
 
+            Expr::Str(_) => {
+                return Err(anyhow!("string can only be assigned to constant"));
+            }
+
+            Expr::Block(ExprBlock { stmts, ret }) => {
+                todo!()
+            }
+
+            Expr::MacroCall(m) => {
+                let Some(lexer) = self.call_macro(m) else {
+                    return Err(macro_not_found(m.name));
+                };
+
+                self.read_expr(
+                    &to_anyhow_result(parse_expr(lexer))?,
+                    insts,
+                    dst,
+                    cache_offset,
+                )?;
+            }
+
             Expr::Var(var) => {
                 let Some(tag) = self.bindings.find_newest(var) else {
                     return Err(variable_not_found(var));
@@ -51,6 +76,7 @@ impl<'a> Atoi<'a> {
                         src: *src,
                     }),
                     Binding::Constant(val) => insts.push(Ir::Assign { dst, value: *val }),
+                    Binding::String(_) => return Err(no_string_error()),
                 }
             }
 
@@ -192,6 +218,7 @@ impl<'a> Atoi<'a> {
                         "only constant value is allowed, but variable `{name}` was found"
                     )),
                     Binding::Constant(v) => Ok(*v),
+                    Binding::String(_) => Err(no_string_error()),
                 }
             }
             _ => Err(anyhow!("only constant value is allowed")),
@@ -236,31 +263,4 @@ impl<'a> Atoi<'a> {
             _ => Ok(false),
         }
     }
-}
-
-fn convert_opr(p: &Punct) -> Option<Operator> {
-    let opr = match p {
-        Punct::Plus => Operator::Add,
-        Punct::Minus => Operator::Sub,
-        Punct::Star => Operator::Mul,
-        Punct::Slash => Operator::Div,
-        Punct::Percent => Operator::Rem,
-        _ => return None,
-    };
-    Some(opr)
-}
-
-fn convert_bool_opr(p: &Punct) -> Option<BoolOperator> {
-    let opr = match p {
-        Punct::GreaterThan => BoolOperator::Gt,
-        Punct::LessThan => BoolOperator::Lt,
-        Punct::GreaterEq => BoolOperator::Ge,
-        Punct::LessEq => BoolOperator::Le,
-        Punct::Equal2 => BoolOperator::Equal,
-        Punct::NotEq => BoolOperator::NotEqual,
-        Punct::And2 => BoolOperator::And,
-        Punct::Or2 => BoolOperator::Or,
-        _ => return None,
-    };
-    Some(opr)
 }
