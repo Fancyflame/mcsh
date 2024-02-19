@@ -61,12 +61,6 @@ impl<'a> Atoi<'a> {
             cache_offset += 1;
         }
 
-        // 返回值默认为0
-        info.insts.push(Ir::Assign {
-            dst: REG_RETURNED_VALUE,
-            value: 0,
-        });
-
         let mut wf = ReadStmtWorkflow {
             label: Some(info),
             continue_break_points: None,
@@ -79,6 +73,11 @@ impl<'a> Atoi<'a> {
         self.bindings.pop_block();
 
         if let Some(mut info) = wf.label.take() {
+            // 返回值默认为0
+            info.insts.push(Ir::Assign {
+                dst: REG_RETURNED_VALUE,
+                value: 0,
+            });
             info.insts.push(Ir::Operation {
                 dst: REG_CURRENT_MEM_OFFSET,
                 opr: Operator::Set,
