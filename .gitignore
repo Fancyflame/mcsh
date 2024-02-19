@@ -1,3 +1,4 @@
 /target
 /.VSCodeCounter
 /Cargo.lock
+/mcsh_out

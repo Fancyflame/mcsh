@@ -1,4 +1,12 @@
-use ir::simulate::SimulateResult;
+use std::{
+    borrow::Cow,
+    fs,
+    path::{Path, PathBuf},
+};
+
+use anyhow::{anyhow, Result};
+use clap::{Parser, Subcommand};
+use ir::{simulate::SimulateResult, LabelMap};
 use parse::parse_file;
 
 use crate::atoi::Atoi;
@@ -7,52 +15,81 @@ mod atoi;
 mod ir;
 mod parse;
 
-fn main() {
-    let defs = parse_file(
-        r#"
-    // start of file
+#[derive(Parser, Debug)]
+#[command(name = "MCSH")]
+#[command(about = "MCSH编译器：将mcsh源代码文件编译为mcfunction文件")]
+struct Cli {
+    #[arg(help = "输入源文件")]
+    input: PathBuf,
 
-    const FOO = -(12 + 32);
-    const BAR = "hello woo\"\\gee";
+    #[command(subcommand)]
+    command: Command,
+}
 
-    fn call(a, b) {
-        return a+b;
+#[derive(Subcommand, Debug)]
+enum Command {
+    #[command(about = "在指定函数上运行指令仿真")]
+    Simulate { function: String },
+
+    #[command(about = "编译文件并快速安装到游戏开发目录，用于调试使用")]
+    Dev { clear: bool },
+
+    #[command(alias = "b", about = "编译文件")]
+    Build {
+        #[arg(long, short, help = "编译文件保存路径")]
+        out: Option<PathBuf>,
+
+        #[arg(
+            short,
+            long,
+            help = "在编译结果附加manifest.json文件。\
+                详细信息将启动命令行进行交互式信息输入。"
+        )]
+        manifest: bool,
+    },
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    dbg!(&cli);
+    let file = fs::read_to_string(&cli.input)?;
+    let defs = parse_file(&file)?;
+    let mut atoi = Atoi::new();
+    atoi.parse(&defs)?;
+    let label_map = atoi.finish();
+
+    match cli.command {
+        Command::Simulate { function } => start_simulation(&label_map, &function),
+        Command::Build { out, manifest } => build(&label_map, out.as_deref(), &cli.input, manifest),
+        Command::Dev { clear } => todo!(),
     }
+}
 
-    export fn test() {
-        let a = -6;
-        let b = FOO;
+fn build(lm: &LabelMap, out: Option<&Path>, file_path: &Path, with_manifest: bool) -> Result<()> {
+    let out_dir: Cow<Path> = match out {
+        Some(o) => o.into(),
+        None => {
+            let Some(parent_dir) = file_path.parent() else {
+                return Err(anyhow!("output directory must be specified with this file"));
+            };
 
-        if !(1 != 2 + 2) {
-            call(1 + 1, 2*7);
-        } else if a==b {
-            call(1, 1);
-        }else{
-            // 一个中文注释
+            parent_dir.join("mcsh_out").into()
         }
+    };
 
-        print!(@a[tag = !aa], "I {#bold}HAVE {b} {#reset}{#red}APPLES!!!");
-        //print!(@a[tag = !aa], "I APPLES!!!");
-
-        /*while a < 5 {
-            a = a+1;
-            if a > 35 {
-                continue;
-            }
-            b=b+1;
-        }*/
-
-        a >< b;
-        return call(a, b);
+    let functions_dir = out_dir.join("functions");
+    if functions_dir.exists() {
+        fs::remove_dir_all(&functions_dir)?;
     }
-    "#,
-    )
-    .unwrap();
+    fs::create_dir_all(&out_dir)?;
 
-    let mut stack = Atoi::new();
-    stack.parse(&defs).unwrap();
-    let lm = stack.finish();
-    let SimulateResult { result, log } = lm.simulate_pub("test");
-    println!("log:\n{log}");
-    println!("result: {result:?}");
+    lm.compile(&functions_dir)?;
+    Ok(())
+}
+
+fn start_simulation(lm: &LabelMap, fn_name: &str) -> Result<()> {
+    let SimulateResult { result, log } = lm.simulate_pub(fn_name);
+    println!("日志：\n{log}");
+    println!("运行结果：{result:?}");
+    Ok(())
 }

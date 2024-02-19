@@ -176,6 +176,7 @@ impl<'a> Atoi<'a> {
                 });
 
                 let branch_end = self.new_label();
+                let cache_offset_saved = wf.cache_offset;
 
                 let mut is_first = true;
                 for (cond, stmts) in arms {
@@ -201,6 +202,7 @@ impl<'a> Atoi<'a> {
                         cond,
                         then: arm_label,
                     });
+                    wf.cache_offset = cache_offset_saved;
                 }
 
                 let default_block = match default {

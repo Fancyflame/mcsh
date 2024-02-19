@@ -5,7 +5,7 @@ use nom::{
     character::complete::alphanumeric1,
     combinator::{eof, map, map_opt, recognize},
     multi::{many0, many0_count, separated_list0},
-    sequence::{delimited, preceded, separated_pair, terminated},
+    sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
     ir::{format::FormatStyle, FormatArgument, Ir},
     parse::{
         entity_selector::entity_selector,
-        lexer::{specified_punct, string, Lexer, Punct},
+        lexer::{parse_tokens, specified_punct, string, Lexer, Punct},
         parse_file::to_anyhow_result,
         MacroCall,
     },
@@ -63,12 +63,22 @@ impl<'a> Atoi<'a> {
             })
         };
 
+        let selector = map_opt(parse_tokens, |tokens| {
+            pair(entity_selector, eof)(Lexer::from(tokens))
+                .ok()
+                .map(|(_, (s, _))| FormatArgument::Selector(s))
+        });
+
         let parse_option = alt((
             map_opt(alphanumeric1, get_bind),
-            map_opt(preceded(tag("#"), alphanumeric1), |name| {
-                println!("{name}");
-                FormatStyle::from_name(name).map(FormatArgument::Style)
-            }),
+            map_opt(
+                preceded(
+                    tag("#"),
+                    recognize(many0_count(alt((alphanumeric1, tag("_"))))),
+                ),
+                |name| FormatStyle::from_name(name).map(FormatArgument::Style),
+            ),
+            selector,
         ));
 
         let r: nom::IResult<_, _> = terminated(

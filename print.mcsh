@@ -1,0 +1,23 @@
+fn center(a, b) {
+    return (a + b)/2;
+}
+
+export fn print_some() {
+    let a = 30;
+    print!(@a,"{#netherite}程序开始");
+    let b = 40;
+    while a < b {
+        a = a + 1;
+        b = b - 1;
+        print!(@a, "{#green}{#bold}现在a是{a}, {#dark_gold}b是{b}");
+    }
+
+    a = center(a, b);
+
+    if a == 30 {
+        print!(@a, "{#green}a等于30");
+    } else {
+        print!(@a, "{#red}a不等于30");
+    }
+    print!(@a, "循环结束");
+}

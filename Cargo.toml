@@ -11,3 +11,4 @@ nom = "7.1"
 thiserror = "1.0"
 const_format = "0.2"
 rand = "0.8"
+clap = { version = "4.5", features = ["derive"] }

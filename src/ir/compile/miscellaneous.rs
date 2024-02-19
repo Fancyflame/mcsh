@@ -132,11 +132,11 @@ pub(super) fn compile_ir<'a>(ir: &'a Ir) -> impl Display + 'a {
         } => {
             let cond = compile_cache_tag(*cond);
             let then = compile_label(then, true);
-            let if_tag = if *positive { "if" } else { "unless" };
+            let if_tag = if *positive { "unless" } else { "if" };
 
             writeln!(
                 output,
-                "execute {if_tag} score MCSH {cond} matches !0 run function {then}",
+                "execute {if_tag} score MCSH {cond} matches 0 run function {then}",
             )
         }
 
@@ -213,14 +213,15 @@ pub(super) fn compile_ir<'a>(ir: &'a Ir) -> impl Display + 'a {
                 match arg {
                     FormatArgument::CacheTag(ct) => {
                         printer.flush()?;
+                        printer.push_comma()?;
                         write!(
                             printer.output,
-                            r#"{{ \
-                                "score": {{ \
-                                    "name": "MCSH", \
-                                    "objective": "{}" \
+                            "{{ \
+                                \"score\": {{ \
+                                    \"name\": \"MCSH\", \
+                                    \"objective\": \"{}\" \
                                 }} \
-                            }}"#,
+                            }}",
                             compile_cache_tag(*ct)
                         )?;
                     }
@@ -229,6 +230,7 @@ pub(super) fn compile_ir<'a>(ir: &'a Ir) -> impl Display + 'a {
                     }
                     FormatArgument::Selector(sel) => {
                         printer.flush()?;
+                        printer.push_comma()?;
                         write!(printer.output, r#"{{ "selector": "{sel}" }}"#)?;
                     }
                     FormatArgument::Style(style) => {
@@ -279,13 +281,17 @@ impl<'a, 'f> Printer<'a, 'f> {
     fn new(output: &'a mut Formatter<'f>, target: &str) -> Result<Self, std::fmt::Error> {
         write!(output, r#"tellraw {target} {{ "rawtext":[ "#)?;
         Ok(Printer {
-            is_first: false,
+            is_first: true,
             buffer: String::new(),
             output,
         })
     }
 
     fn flush(&mut self) -> FmtResult {
+        if self.buffer.is_empty() {
+            return Ok(());
+        }
+        self.push_comma()?;
         write!(self.output, r#"{{ "text": "{}" }}"#, self.buffer)?;
         self.buffer.clear();
         Ok(())
@@ -301,8 +307,8 @@ impl<'a, 'f> Printer<'a, 'f> {
     }
 
     fn end(mut self) -> FmtResult {
-        self.flush();
-        write!(self.output, " ] }}")?;
+        self.flush()?;
+        write!(self.output, " ] }}\n")?;
         Ok(())
     }
 }

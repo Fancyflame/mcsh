@@ -63,6 +63,15 @@ impl<'a> Lexer<'a> {
     }
 }
 
+impl<'a> From<Rc<[Token<'a>]>> for Lexer<'a> {
+    fn from(value: Rc<[Token<'a>]>) -> Self {
+        Lexer {
+            tokens: value,
+            cursor: Default::default(),
+        }
+    }
+}
+
 pub fn keyword<'a>(kw: &'a str) -> impl Fn(Lexer<'a>) -> IResult<'a, ()> {
     move |input| {
         let p = input.peek();

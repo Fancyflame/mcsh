@@ -55,7 +55,7 @@ macro_rules! punct {
             }
         }
 
-        fn parse_punct(input: &str) -> IResult<&str, Punct> {
+        pub fn parse_punct(input: &str) -> IResult<&str, Punct> {
             $(if let r @ Ok(_) = value(Punct::$Punct, tag($display))(input) {
                 r
             } else)* {
@@ -97,28 +97,30 @@ pub enum Literal<'a> {
 }
 
 pub fn parse_tokens(input: &str) -> IResult<&str, Rc<[Token]>> {
-    let parse_token = alt((
-        map(parse_ident, Token::Ident),
-        map(parse_group, Token::Group),
-        map(parse_str, |s| Token::Literal(Literal::Str(s))),
-        map(parse_punct, Token::Punct), // punct必须在int前，因为它需要解析数字前符号
-        map(complete::i32, |num| Token::Literal(Literal::Int(num))),
-    ));
-
     map(
         preceded(parse_sep, many0(terminated(parse_token, parse_sep))),
         |content| content.into_boxed_slice().into(),
     )(input)
 }
 
-fn parse_ident(input: &str) -> IResult<&str, &str> {
+pub fn parse_token(input: &str) -> IResult<&str, Token> {
+    alt((
+        map(parse_ident, Token::Ident),
+        map(parse_group, Token::Group),
+        map(parse_str, |s| Token::Literal(Literal::Str(s))),
+        map(parse_punct, Token::Punct), // punct必须在int前，因为它需要解析数字前符号
+        map(complete::i32, |num| Token::Literal(Literal::Int(num))),
+    ))(input)
+}
+
+pub fn parse_ident(input: &str) -> IResult<&str, &str> {
     recognize(pair(
         alt((alpha1, tag("_"))),
         many0_count(alt((alphanumeric1, tag("_")))),
     ))(input)
 }
 
-fn parse_str(input: &str) -> IResult<&str, &str> {
+pub fn parse_str(input: &str) -> IResult<&str, &str> {
     delimited(
         tag("\""),
         escaped(is_not("\\\"\r\n"), '\\', one_of(r#""\"#)),
@@ -142,7 +144,7 @@ fn parse_sep(input: &str) -> IResult<&str, ()> {
     )(input)
 }
 
-fn parse_group(input: &str) -> IResult<&str, Group> {
+pub fn parse_group(input: &str) -> IResult<&str, Group> {
     let (input, delimiter) = alt((
         value(Delimiter::Paren, tag("(")),
         value(Delimiter::Bracket, tag("[")),

@@ -146,13 +146,13 @@ pub enum Ir<'a> {
     SimulationAbort,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum FormatArgument<'a> {
     Text(&'a str),
     CacheTag(CacheTag<'a>),
     ConstInt(i32),
     Style(FormatStyle),
-    Selector(&'a str),
+    Selector(String),
 }
 
 #[derive(Clone, Copy, Debug)]
