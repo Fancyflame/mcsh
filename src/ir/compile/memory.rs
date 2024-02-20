@@ -42,7 +42,7 @@ impl MemoryMaker<'_> {
                 let namespace = if is_store {
                     compile_store_func(chunk_count).to_string()
                 } else {
-                    compile_store_func(chunk_count).to_string()
+                    compile_load_func(chunk_count).to_string()
                 };
 
                 bin_search(
