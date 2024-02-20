@@ -33,7 +33,7 @@ impl<'a> Atoi<'a> {
         }: &ItemFn<'a>,
     ) -> Result<()> {
         self.bindings.delimite();
-        let mut info = self.new_label();
+        let info = self.new_label();
 
         if *export {
             if args.len() != 0 {

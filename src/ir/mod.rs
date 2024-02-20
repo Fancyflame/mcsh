@@ -5,12 +5,11 @@ use std::{
 
 use anyhow::{anyhow, Result};
 
-use self::format::FormatStyle;
+use crate::format::FormatStyle;
 
 const PREFIX: &str = "__MCSH_Private";
 
 pub mod compile;
-pub mod format;
 pub mod simulate;
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]

@@ -216,17 +216,14 @@ impl<'a> Atoi<'a> {
                     cond: REG_COND_ENABLE,
                     then: default_label,
                 });
+                wf.cache_offset = cache_offset_saved;
 
                 self.label_map
                     .insert_label(wf.label.replace(branch_end).unwrap())?;
             }
 
             Stmt::While(StmtWhile { expr, body }) => {
-                let mut loop_end = self.new_label();
-                loop_end.insts.push(Ir::Assign {
-                    dst: REG_COND_ENABLE,
-                    value: 0,
-                });
+                let loop_end = self.new_label();
                 let loop_end_label = loop_end.label;
                 self.label_map.insert_label(loop_end)?;
 

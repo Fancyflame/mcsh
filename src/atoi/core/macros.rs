@@ -10,7 +10,8 @@ use nom::{
 
 use crate::{
     atoi::{Atoi, Binding},
-    ir::{format::FormatStyle, FormatArgument, Ir},
+    format::FormatStyle,
+    ir::{FormatArgument, Ir},
     parse::{
         entity_selector::entity_selector,
         lexer::{parse_tokens, specified_punct, string, Lexer, Punct},

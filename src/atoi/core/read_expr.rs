@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 
 use crate::{
     atoi::{get_anonymous_id, no_string_error, variable_not_found, Atoi, Binding},
-    ir::{BoolOperator, BoolOprRhs, CacheTag, Ir, Operator},
+    ir::{BoolOprRhs, CacheTag, Ir, Operator},
     parse::{
         lexer::Punct,
         parse_file::{parse_expr, to_anyhow_result},
@@ -47,7 +47,7 @@ impl<'a> Atoi<'a> {
                 return Err(anyhow!("string can only be assigned to constant"));
             }
 
-            Expr::Block(ExprBlock { stmts, ret }) => {
+            Expr::Block(ExprBlock { .. }) => {
                 todo!()
             }
 
