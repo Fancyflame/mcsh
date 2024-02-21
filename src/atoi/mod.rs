@@ -6,7 +6,7 @@ use crate::{
 };
 
 use self::{
-    core::{CONST_MINUS_ONE, REG_COND_ENABLE, REG_CURRENT_MEM_OFFSET},
+    core::{CONST_MINUS_ONE, REG_COND_ENABLE, REG_CURRENT_MEM_OFFSET, REG_RETURNED_VALUE},
     stack::UnsizedStack,
 };
 
@@ -37,9 +37,14 @@ pub struct Atoi<'a> {
 impl<'a> Atoi<'a> {
     pub fn new() -> Self {
         let mut label_map = LabelMap::new(64, 4);
-        label_map.insert_static(REG_COND_ENABLE, 0).unwrap();
-        label_map.insert_static(REG_CURRENT_MEM_OFFSET, 0).unwrap();
-        label_map.insert_static(CONST_MINUS_ONE, -1).unwrap();
+        for (key, val) in [
+            (REG_COND_ENABLE, 0),
+            (REG_CURRENT_MEM_OFFSET, 0),
+            (CONST_MINUS_ONE, -1),
+            (REG_RETURNED_VALUE, 0),
+        ] {
+            label_map.insert_static(key, val).unwrap();
+        }
 
         Self {
             functions: UnsizedStack::new(),

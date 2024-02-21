@@ -36,7 +36,7 @@ impl<'a> Atoi<'a> {
         let info = self.new_label();
 
         if *export {
-            if args.len() != 0 {
+            if !args.is_empty() {
                 return Err(anyhow!(
                     "cannot export function `{name}` because \
                     it must takes no arguments",

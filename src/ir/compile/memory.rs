@@ -9,7 +9,7 @@ use std::{
 use const_format::formatcp;
 
 use super::{compile_cache_tag, PREFIX};
-use crate::ir::{to_display, CacheTag};
+use crate::ir::{to_display, CacheTag, REG_MATCH_ENABLED};
 
 use super::binary_search::bin_search;
 
@@ -47,10 +47,15 @@ impl MemoryMaker<'_> {
 
                 bin_search(
                     self.functions_dir,
-                    mem_chunk_count,
+                    &Vec::from_iter(0..mem_chunk_count as i32),
                     &namespace,
                     REG_MEM_PTR,
                     |index, file| {
+                        let index = match index {
+                            Some(idx) => u32::try_from(idx).unwrap(),
+                            None => return writeln!(file, "say MCSH ERROR: Memory overflow"),
+                        };
+
                         for (cache_unit, mem_unit) in (index * self.word_width
                             ..(index + chunk_count) * self.word_width)
                             .enumerate()
@@ -63,7 +68,7 @@ impl MemoryMaker<'_> {
                                 (&cache_unit, &mem_unit)
                             };
 
-                            writeln!(file, "scoreboard players set MCSH {dst} = MCSH {src}",)?;
+                            writeln!(file, "scoreboard players operation MCSH {dst} = MCSH {src}",)?;
                         }
                         Ok(())
                     },
@@ -81,6 +86,8 @@ impl MemoryMaker<'_> {
         let mut file = File::create(self.functions_dir.join("mcsh_bootstrap.mcfunction"))?;
 
         writeln!(file, "scoreboard players reset MCSH")?;
+        writeln!(file, "{}", register_object(REG_MATCH_ENABLED))?;
+        writeln!(file, "{}", register_object(REG_MEM_PTR))?;
 
         for x in 0..self.mem_size {
             writeln!(file, "{}", register_object(compile_mem_unit(x)))?;
@@ -110,7 +117,7 @@ impl MemoryMaker<'_> {
             )?;
         }
 
-        writeln!(file, "{}", register_object(REG_MEM_PTR))
+        Ok(())
     }
 }
 

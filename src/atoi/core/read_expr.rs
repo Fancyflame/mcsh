@@ -91,7 +91,7 @@ impl<'a> Atoi<'a> {
 
                     Ir::Operation { dst, opr, src: rhs }
                 } else if let Some(opr) = convert_bool_opr(bin_op) {
-                    let lhs = self.read_expr_at_next_reg(&lhs_expr, insts, &mut cache_offset)?;
+                    let lhs = self.read_expr_at_next_reg(lhs_expr, insts, &mut cache_offset)?;
 
                     if let Expr::Integer(val) = **rhs_expr {
                         Ir::BoolOperation {
@@ -101,8 +101,7 @@ impl<'a> Atoi<'a> {
                             rhs: BoolOprRhs::Constant(val),
                         }
                     } else {
-                        let rhs =
-                            self.read_expr_at_next_reg(&rhs_expr, insts, &mut cache_offset)?;
+                        let rhs = self.read_expr_at_next_reg(rhs_expr, insts, &mut cache_offset)?;
                         Ir::BoolOperation {
                             dst,
                             lhs,

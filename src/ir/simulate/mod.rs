@@ -135,17 +135,17 @@ impl<'a> SimulateMachine<'a> {
 
         match ir {
             Ir::Assign { dst, value } => {
-                let lhs_old = self.display_value(&dst);
+                let lhs_old = self.display_value(dst);
                 self.registers.insert(*dst, *value);
                 log!("{dst:?} = {value} ({lhs_old} -> {value})");
             }
 
             Ir::BoolOperation { dst, lhs, opr, rhs } => {
                 let rhs_val = match rhs {
-                    BoolOprRhs::CacheTag(ct) => self.read_value(&ct)?,
+                    BoolOprRhs::CacheTag(ct) => self.read_value(ct)?,
                     BoolOprRhs::Constant(val) => *val,
                 };
-                let lhs_val = self.read_value(&lhs)?;
+                let lhs_val = self.read_value(lhs)?;
 
                 self.registers
                     .insert(*dst, calculate_bool_bin_expr(lhs_val, rhs_val, *opr));
@@ -154,7 +154,7 @@ impl<'a> SimulateMachine<'a> {
             }
 
             Ir::Call { label } => {
-                self.call(&label)?;
+                self.call(label)?;
                 log!("call {label:?}");
             }
 
@@ -167,14 +167,14 @@ impl<'a> SimulateMachine<'a> {
                 cond,
                 then,
             } => {
-                let mut cond_val = self.read_value(&cond)? != 0;
+                let mut cond_val = self.read_value(cond)? != 0;
 
                 if !positive {
                     cond_val = !cond_val;
                 }
 
                 if cond_val {
-                    self.call(&then)?;
+                    self.call(then)?;
                 }
 
                 log!(
@@ -184,7 +184,7 @@ impl<'a> SimulateMachine<'a> {
             }
 
             Ir::Increase { dst, value } => {
-                *self.get_value_mut(&dst)? += value;
+                *self.get_value_mut(dst)? += value;
                 log!("{dst:?} += {value}");
             }
 
@@ -192,7 +192,7 @@ impl<'a> SimulateMachine<'a> {
                 let range = self.get_mem_slice(*mem_offset, *size)?;
                 let mem = &self.memory[range.clone()];
 
-                for (index, src) in mem.into_iter().enumerate() {
+                for (index, src) in mem.iter().enumerate() {
                     let ct = CacheTag::Regular(index as _);
                     match *src {
                         Some(val) => self.registers.insert(ct, val),
@@ -208,7 +208,7 @@ impl<'a> SimulateMachine<'a> {
             }
 
             Ir::Not { dst } => {
-                let val = self.get_value_mut(&dst)?;
+                let val = self.get_value_mut(dst)?;
                 let old = *val;
                 *val = if old == 0 { 1 } else { 0 };
                 let val = *val;
@@ -221,21 +221,21 @@ impl<'a> SimulateMachine<'a> {
                 opr: Operator::Set,
                 src,
             } => {
-                let rhs = self.read_value(&src)?;
-                let lhs_old = self.display_value(&dst);
+                let rhs = self.read_value(src)?;
+                let lhs_old = self.display_value(dst);
                 log!("{dst:?} = {src:?} ({lhs_old} -> {rhs})");
                 self.registers.insert(*dst, rhs);
             }
 
             Ir::Operation { dst, opr, src } => {
-                let rhs = self.read_value(&src)?;
-                let lhs = self.get_value_mut(&dst)?;
+                let rhs = self.read_value(src)?;
+                let lhs = self.get_value_mut(dst)?;
                 let lhs_value = *lhs;
 
                 match opr {
                     Operator::Swp => {
                         *lhs = rhs;
-                        *self.get_value_mut(&src).unwrap() = lhs_value;
+                        *self.get_value_mut(src).unwrap() = lhs_value;
                     }
                     _ => *lhs = calculate_arithmetical_bin_expr(*lhs, rhs, *opr),
                 }
@@ -253,7 +253,7 @@ impl<'a> SimulateMachine<'a> {
             Ir::Random { dst, max, min } => {
                 let (max, min) = (*max, *min);
                 let value = self.rng.gen_range(min..=max);
-                let lhs_old = self.display_value(&dst);
+                let lhs_old = self.display_value(dst);
                 self.registers.insert(*dst, value);
                 log!("{dst:?} = random {min}..{max} ({lhs_old} -> {value})");
             }
@@ -262,7 +262,7 @@ impl<'a> SimulateMachine<'a> {
                 let range = self.get_mem_slice(*mem_offset, *size)?;
                 let mem = &mut self.memory[range.clone()];
 
-                for (index, dst) in mem.into_iter().enumerate() {
+                for (index, dst) in mem.iter_mut().enumerate() {
                     let ct = CacheTag::Regular(index as _);
                     *dst = self.registers.get(&ct).copied();
                 }
@@ -289,7 +289,7 @@ impl<'a> SimulateMachine<'a> {
                         FormatArgument::ConstInt(int) => write!(string, "{int}").unwrap(),
                         FormatArgument::Selector(sel) => write!(string, "(SEL: {sel})").unwrap(),
                         FormatArgument::Style(_) => {}
-                        FormatArgument::Text(t) => string.push_str(&t),
+                        FormatArgument::Text(t) => string.push_str(t),
                     }
                 }
                 log!("{string}")

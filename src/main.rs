@@ -92,17 +92,19 @@ fn build(
             let Some(parent_dir) = file_path.parent() else {
                 return Err(anyhow!("output directory must be specified with this file"));
             };
-
-            parent_dir.join("mcsh_out").into()
+            parent_dir.join("mcsh_out")
         }
     };
+
+    if !out_dir.exists() {
+        fs::create_dir_all(&out_dir)?;
+    }
 
     let work_dir = if mcpack {
         dirs::cache_dir()
             .as_ref()
             .unwrap_or(&out_dir)
-            .join("__mcsh_cache_dir")
-            .into()
+            .join("mcsh_compile_cache")
     } else {
         out_dir.clone()
     };
@@ -116,7 +118,7 @@ fn build(
         if manifest_file.exists() && !mcpack {
             return Err(anyhow!(
                 "已存在manifest.json文件，请妥善处理后重试或\
-                    关闭自动生成manifest.json选项"
+                    关闭生成manifest.json选项"
             ));
         }
         fs::write(manifest_file, McManifest::interact()?.to_json())?;

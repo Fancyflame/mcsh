@@ -4,10 +4,12 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use const_format::formatcp;
 
 use crate::format::FormatStyle;
 
 const PREFIX: &str = "__MCSH_Private";
+const REG_MATCH_ENABLED: &str = formatcp!("{PREFIX}_Flag_MatchEnabled");
 
 pub mod compile;
 pub mod simulate;

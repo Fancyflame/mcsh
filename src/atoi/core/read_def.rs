@@ -81,7 +81,7 @@ impl<'a> Atoi<'a> {
             Expr::Integer(int) => Ok(ConstValue::Int(*int)),
             Expr::Binary(ExprBinary { bin_op, lhs, rhs }) => {
                 let (ConstValue::Int(lhs), ConstValue::Int(rhs)) =
-                    (self.read_constant(&lhs)?, self.read_constant(&rhs)?)
+                    (self.read_constant(lhs)?, self.read_constant(rhs)?)
                 else {
                     return Err(anyhow!("string cannot do binary operation"));
                 };
@@ -96,7 +96,7 @@ impl<'a> Atoi<'a> {
                 Ok(ConstValue::Int(r))
             }
             Expr::Unary(ExprUnary { op, expr }) => {
-                let ConstValue::Int(val) = self.read_constant(&expr)? else {
+                let ConstValue::Int(val) = self.read_constant(expr)? else {
                     return Err(anyhow!("string cannot do unary operation"));
                 };
 
@@ -122,13 +122,13 @@ impl<'a> Atoi<'a> {
                 match bind {
                     Binding::Cache(_) => Err(anyhow!("identifier `{id}` is not a constant")),
                     Binding::Constant(val) => Ok(ConstValue::Int(*val)),
-                    Binding::String(val) => Ok(ConstValue::Str(*val)),
+                    Binding::String(val) => Ok(ConstValue::Str(val)),
                 }
             }
-            Expr::Str(s) => Ok(ConstValue::Str(*s)),
+            Expr::Str(s) => Ok(ConstValue::Str(s)),
             Expr::Block(ExprBlock { stmts, ret }) => {
                 if stmts.is_empty() {
-                    self.read_constant(&ret)
+                    self.read_constant(ret)
                 } else {
                     Err(anyhow!(
                         "a constant expression block cannot contains any statement yet"

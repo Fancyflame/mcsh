@@ -31,7 +31,7 @@ impl<'a> Atoi<'a> {
                 .map_err(|_| anyhow!("syntax error occurred when calling `run` macro"))?;
 
         for cmd in cmds {
-            if cmd.contains("\n") || cmd.contains("\r") {
+            if cmd.contains('\n') || cmd.contains('\r') {
                 return Err(anyhow!("raw command cannot contains new lines (\\r\\n)"));
             }
 
@@ -60,7 +60,7 @@ impl<'a> Atoi<'a> {
             self.bindings.find_newest(name).map(|bind| match bind {
                 Binding::Cache(c) => FormatArgument::CacheTag(*c),
                 Binding::Constant(i) => FormatArgument::ConstInt(*i),
-                Binding::String(s) => FormatArgument::Text(*s),
+                Binding::String(s) => FormatArgument::Text(s),
             })
         };
 

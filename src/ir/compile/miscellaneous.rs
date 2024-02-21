@@ -308,7 +308,7 @@ impl<'a, 'f> Printer<'a, 'f> {
 
     fn end(mut self) -> FmtResult {
         self.flush()?;
-        write!(self.output, " ] }}\n")?;
+        writeln!(self.output, " ] }}")?;
         Ok(())
     }
 }

@@ -120,7 +120,7 @@ pub fn punct(input: Lexer) -> IResult<Punct> {
         let punct = *punct;
         Ok((input, punct))
     } else {
-        error("punctuation", &p)
+        error("punctuation", p)
     }
 }
 
