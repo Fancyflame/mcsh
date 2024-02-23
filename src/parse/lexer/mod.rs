@@ -1,4 +1,8 @@
-use std::{cell::Cell, fmt::Display, rc::Rc};
+use std::{
+    cell::Cell,
+    fmt::{Display, Write},
+    rc::Rc,
+};
 
 use anyhow::anyhow;
 use nom::{
@@ -61,6 +65,31 @@ impl<'a> Lexer<'a> {
         self.cursor
             .set(self.tokens.len().min(self.cursor.get() + length))
     }
+
+    pub fn print_err(&self) -> anyhow::Error {
+        let index = self.cursor.get();
+        let len = self.tokens.len();
+        let mut output = String::new();
+
+        let before = &self.tokens[index.checked_sub(10).unwrap_or(0)..index];
+        let after = &self.tokens[(index + 1).min(len)..(index + 11).min(len)];
+
+        for t in before {
+            write!(output, "{t} ").unwrap();
+        }
+
+        output.push_str(">>>>>> ");
+        if let Some(t) = self.tokens.get(index) {
+            write!(output, "{t}").unwrap();
+        }
+        output.push_str(" <<<<<<");
+
+        for t in after {
+            write!(output, " {t}").unwrap();
+        }
+
+        anyhow!("{output}")
+    }
 }
 
 impl<'a> From<Rc<[Token<'a>]>> for Lexer<'a> {
@@ -104,9 +133,8 @@ pub fn group(delimiter: Delimiter) -> impl Fn(Lexer) -> IResult<Lexer> {
 
 pub fn ident(input: Lexer) -> IResult<&str> {
     let p = input.peek();
-    if let Token::Ident(ident) = p {
+    if let &Token::Ident(ident) = p {
         input.step(1);
-        let ident = *ident;
         Ok((input, ident))
     } else {
         error("identifier", p)
@@ -115,9 +143,8 @@ pub fn ident(input: Lexer) -> IResult<&str> {
 
 pub fn punct(input: Lexer) -> IResult<Punct> {
     let p = input.peek();
-    if let Token::Punct(punct) = p {
+    if let &Token::Punct(punct) = p {
         input.step(1);
-        let punct = *punct;
         Ok((input, punct))
     } else {
         error("punctuation", p)
@@ -130,9 +157,8 @@ pub fn specified_punct<'a>(expect: Punct) -> impl FnMut(Lexer<'a>) -> IResult<'a
 
 pub fn integer(input: Lexer) -> IResult<i32> {
     let p = input.peek();
-    if let Token::Literal(Literal::Int(int)) = p {
+    if let &Token::Literal(Literal::Int(int)) = p {
         input.step(1);
-        let int = *int;
         Ok((input, int))
     } else {
         error("integer", p)
@@ -141,9 +167,8 @@ pub fn integer(input: Lexer) -> IResult<i32> {
 
 pub fn string(input: Lexer) -> IResult<&str> {
     let p = input.peek();
-    if let Token::Literal(Literal::Str(s)) = p {
+    if let &Token::Literal(Literal::Str(s)) = p {
         input.step(1);
-        let s = *s;
         Ok((input, s))
     } else {
         error("string", p)

@@ -70,6 +70,7 @@ punct! {
     NotEq "!=",
     LessEq "<=",
     GreaterEq ">=",
+    FatArrow "=>",
     And2 "&&",
     Or2 "||",
     Swap "><",
@@ -194,14 +195,14 @@ impl Delimiter {
 impl Display for Group<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let (start, end) = match self.delimiter {
-            Delimiter::Paren => ("(", ")"),
-            Delimiter::Bracket => ("[", "]"),
-            Delimiter::Brace => ("{", "}"),
+            Delimiter::Paren => ("(", " )"),
+            Delimiter::Bracket => ("[", " ]"),
+            Delimiter::Brace => ("{", " }"),
         };
 
         write!(f, "{start} ")?;
         for t in self.content.iter() {
-            write!(f, "{t}")?;
+            write!(f, " {t}")?;
         }
         write!(f, "{end}")
     }

@@ -1,11 +1,13 @@
 use anyhow::{anyhow, Result};
 use nom::{
     branch::alt,
-    combinator::{eof, map, opt, value, verify},
+    combinator::{cut, eof, map, opt, value, verify},
     multi::{many0, separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
     Parser,
 };
+
+use crate::parse::error::McshError;
 
 use super::{
     lexer::{
@@ -13,7 +15,7 @@ use super::{
         Token,
     },
     Block, Definition, Expr, ExprBlock, ExprFnCall, ExprUnary, IResult, ItemConstant, ItemFn,
-    ItemStatic, MacroCall, Stmt, StmtAssign, StmtIf, StmtReturn, StmtSwap, StmtWhile,
+    ItemStatic, MacroCall, Stmt, StmtAssign, StmtIf, StmtMatch, StmtReturn, StmtSwap, StmtWhile,
 };
 
 #[cfg(debug_assertions)]
@@ -29,8 +31,13 @@ fn debug<'a, O, E>(mut parser: impl Parser<Lexer<'a>, O, E>) -> impl Parser<Lexe
 
 pub fn parse_file(file: &str) -> anyhow::Result<Vec<Definition>> {
     let lexer = Lexer::parse(file)?;
-    let (_, vec) =
-        terminated(many0(parse_definition), eof)(lexer).map_err(|err| anyhow!("{err}"))?;
+    let (_, vec) = terminated(many0(parse_definition), eof)(lexer).map_err(|err| match err {
+        nom::Err::Incomplete(_) => unreachable!(),
+        nom::Err::Error(err) | nom::Err::Failure(err) => match err {
+            McshError::Token { .. } => anyhow!("{err}"),
+            McshError::Nom(n) => n.input.print_err(),
+        },
+    })?;
     Ok(vec)
 }
 
@@ -102,7 +109,7 @@ pub fn parse_item_fn(input: Lexer) -> IResult<ItemFn> {
                         separated_list0(specified_punct(Punct::Comma), ident),
                         eof,
                     )),
-                    parse_stmts,
+                    parse_block,
                 )),
             ),
         ),
@@ -115,7 +122,7 @@ pub fn parse_item_fn(input: Lexer) -> IResult<ItemFn> {
     )(input)
 }
 
-pub fn parse_stmts(input: Lexer) -> IResult<Block> {
+pub fn parse_block(input: Lexer) -> IResult<Block> {
     group(Delimiter::Brace)
         .and_then(terminated(many0(parse_stmt), eof))
         .parse(input)
@@ -129,8 +136,6 @@ fn kw_stmt_parser<'a>(
 }
 
 pub fn parse_stmt(input: Lexer) -> IResult<Stmt> {
-    let parse_block = map(group(Delimiter::Brace).and_then(parse_stmts), Stmt::Block);
-
     let parse_let = map(
         terminated(
             pair(
@@ -149,7 +154,7 @@ pub fn parse_stmt(input: Lexer) -> IResult<Stmt> {
     );
 
     let parse_while = map(
-        preceded(keyword("while"), pair(parse_expr, parse_stmts)),
+        preceded(keyword("while"), cut(pair(parse_expr, parse_block))),
         |(expr, body)| Stmt::While(StmtWhile { expr, body }),
     );
 
@@ -158,13 +163,46 @@ pub fn parse_stmt(input: Lexer) -> IResult<Stmt> {
             pair(
                 separated_list1(
                     keyword("else"),
-                    preceded(keyword("if"), pair(parse_expr, parse_stmts)),
+                    preceded(keyword("if"), pair(parse_expr, parse_block)),
                 ),
-                opt(preceded(keyword("else"), parse_stmts)),
+                opt(preceded(keyword("else"), parse_block)),
             ),
             |(arms, default)| Stmt::If(StmtIf { arms, default }),
         )
     };
+
+    let parse_match = map(
+        preceded(
+            keyword("match"),
+            cut(pair(
+                parse_expr,
+                group(Delimiter::Brace).and_then(terminated(
+                    separated_list0(
+                        specified_punct(Punct::Comma),
+                        separated_pair(
+                            alt((
+                                map(
+                                    pair(opt(specified_punct(Punct::Minus)), integer),
+                                    |(minus, int)| Some(int * if minus.is_some() { -1 } else { 1 }),
+                                ),
+                                map(specified_punct(Punct::Dot2), |_| None),
+                            )),
+                            specified_punct(Punct::FatArrow),
+                            parse_stmt,
+                        ),
+                    ),
+                    eof,
+                )),
+            )),
+        ),
+        |(expr, mut arms)| {
+            arms.sort_by_key(|&(x, _)| x);
+            Stmt::Match(StmtMatch {
+                expr,
+                sorted_arms: arms,
+            })
+        },
+    );
 
     let parse_swap = map(
         terminated(
@@ -193,17 +231,19 @@ pub fn parse_stmt(input: Lexer) -> IResult<Stmt> {
         kw_stmt_parser(Stmt::Break, "break"),
         kw_stmt_parser(Stmt::Continue, "continue"),
         kw_stmt_parser(Stmt::Debugger, "debugger"),
-        parse_block,
+        map(parse_block, Stmt::Block),
         parse_let,
         parse_while,
         parse_if,
         parse_return,
         parse_swap,
         parse_stmt_expr,
+        parse_match,
         map(
             terminated(parse_macro, specified_punct(Punct::Semi)),
             Stmt::MacroCall,
         ),
+        map(parse_definition, Stmt::Def),
     ))(input)
 }
 
@@ -217,7 +257,7 @@ pub fn parse_expr(input: Lexer) -> IResult<Expr> {
 }
 
 fn parse_atomic_expr(input: Lexer) -> IResult<Expr> {
-    let parse_expr_block = map(
+    let _parse_expr_block = map(
         group(Delimiter::Brace).and_then(terminated(pair(many0(parse_stmt), parse_expr), eof)),
         |(stmts, ret)| {
             Expr::Block(ExprBlock {
@@ -229,7 +269,7 @@ fn parse_atomic_expr(input: Lexer) -> IResult<Expr> {
 
     let atomic_expr = alt((
         group(Delimiter::Paren).and_then(parse_expr),
-        parse_expr_block,
+        //parse_expr_block,
         map(integer, Expr::Integer),
         map(string, Expr::Str),
         map(

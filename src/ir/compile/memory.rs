@@ -9,7 +9,7 @@ use std::{
 use const_format::formatcp;
 
 use super::{compile_cache_tag, PREFIX};
-use crate::ir::{to_display, CacheTag, REG_MATCH_ENABLED};
+use crate::ir::{to_display, CacheTag, MCSH_INIT_FUNC, REG_MATCH_ENABLED};
 
 use super::binary_search::bin_search;
 
@@ -50,6 +50,7 @@ impl MemoryMaker<'_> {
                     &Vec::from_iter(0..mem_chunk_count as i32),
                     &namespace,
                     REG_MEM_PTR,
+                    true,
                     |index, file| {
                         let index = match index {
                             Some(idx) => u32::try_from(idx).unwrap(),
@@ -83,7 +84,10 @@ impl MemoryMaker<'_> {
     }
 
     pub fn mem_bootstrap(&self) -> io::Result<()> {
-        let mut file = File::create(self.functions_dir.join("mcsh_bootstrap.mcfunction"))?;
+        let mut file = File::create(
+            self.functions_dir
+                .join(formatcp!("{MCSH_INIT_FUNC}.mcfunction")),
+        )?;
 
         writeln!(file, "scoreboard players reset MCSH")?;
         writeln!(file, "{}", register_object(REG_MATCH_ENABLED))?;

@@ -9,33 +9,51 @@ fn call(a, b) {
     return a + b;
 }
 
+export fn test2() {
+    let a = 5;
+    match a {
+        5 => {
+            print!(@a, "a等于5");
+        },
+        1 => {
+            print!(@a, "a等于1");
+        },
+        3 => {
+            print!(@a, "a等于3");
+        },
+        .. => {
+            print!(@a, "没有匹配成功");
+        }
+    }
+}
+/*
 export fn test() {
     let a = 6;
     let b = 10;
 
-    /*if !(1 != 2 + 2) {
+    if !(1 != 2 + 2) {
         call(1 + 1, 2*7);
     } else if a==b {
         call(1, 1);
     }else{
         // 一个中文注释
-    }*/
+    }
 
     call(a,b);
 
     //print!(@a, "I {#bold}HAVE {b} {#reset}{#red}APPLES!!!");
     //print!(@a, "I APPLES!!!");
 
-    /*while a < 5 {
+    while a < 5 {
         a = a+1;
         if a > 35 {
             continue;
         }
         b=b+1;
-    }*/
+    }
 
     a >< b;
     let result = call(a, b);
     print!(@a, "a: {a}, b: {b}, result: {result}");
     print!(@a, "运算结果是{result}");
-}
+}*/

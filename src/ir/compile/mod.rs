@@ -22,6 +22,7 @@ mod miscellaneous;
 
 impl LabelMap<'_> {
     pub fn compile(&self, functions_dir: &Path) -> Result<()> {
+        let mut anonymous_table_id = 0;
         let mcsh_dir = functions_dir.join("MCSH");
         if !mcsh_dir.exists() {
             fs::create_dir_all(mcsh_dir)?;
@@ -47,6 +48,7 @@ impl LabelMap<'_> {
                 &mut cache_set,
                 *label,
                 &info.insts,
+                &mut anonymous_table_id,
             )?;
         }
 
@@ -101,6 +103,7 @@ fn compile_one_label(
     cache_set: &mut HashSet<u32>,
     label: Label,
     insts: &Vec<Ir>,
+    anonymous_table_id: &mut u32,
 ) -> io::Result<()> {
     let mut file_path = functions_dir.to_path_buf();
     if let Label::Named { export: false, .. } | Label::Anonymous(_) = label {
@@ -119,6 +122,39 @@ fn compile_one_label(
                 if let CacheTag::Regular(id) = dst {
                     cache_set.insert(*id);
                 }
+            }
+            Ir::Table {
+                cond,
+                sorted_arms: arms,
+            } => {
+                let tid = *anonymous_table_id;
+                *anonymous_table_id += 1;
+                let mut arm_vec: Vec<i32> = arms.iter().filter_map(|&(a, _)| a).collect();
+                arm_vec.sort();
+
+                let mcfn = format!("{PREFIX}_Table_{tid}");
+                binary_search::bin_search(
+                    functions_dir,
+                    &arm_vec,
+                    &mcfn,
+                    &compile_cache_tag(*cond).to_string(),
+                    false,
+                    |arm, file| {
+                        let target_label = match arms.binary_search_by(|&(x, _)| x.cmp(&arm)) {
+                            Ok(idx) => &arms[idx].1,
+                            Err(_) => {
+                                if arm.is_none() {
+                                    return Ok(());
+                                } else {
+                                    panic!("table arms is not sorted");
+                                }
+                            }
+                        };
+                        writeln!(file, "function {}", compile_label(target_label, true))
+                    },
+                )?;
+                writeln!(file, "function MCSH/{mcfn}")?;
+                continue;
             }
             _ => {}
         }

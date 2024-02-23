@@ -5,7 +5,8 @@ use crate::{
     ir::{BoolOperator, BoolOprRhs, CacheTag, Ir, Label, LabelInfo, Operator},
     parse::{
         parse_file::{parse_stmt, to_anyhow_result},
-        Expr, MacroCall, Stmt, StmtAssign, StmtIf, StmtReturn, StmtSwap, StmtWhile,
+        Definition, Expr, MacroCall, Stmt, StmtAssign, StmtIf, StmtMatch, StmtReturn, StmtSwap,
+        StmtWhile,
     },
 };
 
@@ -260,6 +261,41 @@ impl<'a> Atoi<'a> {
                 self.label_map.insert_label(cond_info)?;
             }
 
+            Stmt::Match(StmtMatch { expr, sorted_arms }) => {
+                let mut cache_offset = wf.cache_offset;
+                let cond = self.read_expr_at_next_reg(expr, wf.insts(), &mut cache_offset)?;
+                if let Some((&(arm, _), _)) = sorted_arms
+                    .windows(2)
+                    .map(|arr| (&arr[0], &arr[1]))
+                    .find(|(a, b)| a.0 >= b.0)
+                {
+                    return Err(match arm {
+                        Some(int) => anyhow!("duplicated match arm `{int}` detected"),
+                        None => anyhow!("duplicated default match arm detected"),
+                    });
+                }
+
+                let mut output_arms = Vec::new();
+                for (arm, stmt) in sorted_arms {
+                    let info = self.new_label();
+                    output_arms.push((*arm, info.label));
+                    let mut wf2 = ReadStmtWorkflow {
+                        label: Some(info),
+                        continue_break_points: wf.continue_break_points,
+                        cache_offset: wf.cache_offset,
+                    };
+                    self.read_stmt(stmt, &mut wf2)?;
+                    if let Some(info) = wf2.label.take() {
+                        self.label_map.insert_label(info)?;
+                    }
+                }
+
+                wf.insts().push(Ir::Table {
+                    cond,
+                    sorted_arms: output_arms,
+                })
+            }
+
             Stmt::Debugger => {
                 wf.insts().push(Ir::SimulationAbort);
             }
@@ -269,12 +305,24 @@ impl<'a> Atoi<'a> {
                     return self.read_stmt(&to_anyhow_result(parse_stmt(lexer))?, wf);
                 }
 
+                let insts = wf.insts();
+                let lexer = tokens.clone();
+
                 match *name {
-                    "run" => Self::macro_run(wf.insts(), tokens.clone()),
-                    "print" => self.macro_print(wf.insts(), tokens.clone()),
+                    "run" => Self::macro_run(insts, lexer),
+                    "run_concat" => self.macro_run_concat(insts, lexer),
+                    "print" => self.macro_print(insts, lexer),
+                    "title" => self.macro_title(insts, lexer),
                     _ => return Err(macro_not_found(name)),
                 }?;
             }
+
+            Stmt::Def(def) => match def {
+                Definition::Function(_) => {
+                    return Err(anyhow!("functions are not allowed in statement blocks"));
+                }
+                _ => self.read_def(def)?,
+            },
         }
 
         Ok(())

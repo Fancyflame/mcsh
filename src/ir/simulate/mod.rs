@@ -207,11 +207,11 @@ impl<'a> SimulateMachine<'a> {
                 );
             }
 
-            Ir::Not { dst } => {
-                let val = self.get_value_mut(dst)?;
-                let old = *val;
-                *val = if old == 0 { 1 } else { 0 };
-                let val = *val;
+            Ir::Not { src, dst } => {
+                let val = self.read_value(src)?;
+                let dst_value = self.get_value_mut(dst)?;
+                let old = *dst_value;
+                *dst_value = if val == 0 { 1 } else { 0 };
 
                 log!("not {dst:?} ({old} -> {val})");
             }
@@ -279,8 +279,45 @@ impl<'a> SimulateMachine<'a> {
                 return Err(anyhow!("simulation was aborted by pause command"));
             }
 
-            Ir::PrintFmt { args, target } => {
-                let mut string = format!("print to `{target}`: ");
+            Ir::Table { cond, sorted_arms } => {
+                let cond_val = self.read_value(cond)?;
+
+                if sorted_arms.windows(2).any(|arr| arr[0].0 >= arr[1].0) {
+                    return Err(anyhow!(
+                        "table arms are not sorted or duplicated arms exist"
+                    ));
+                }
+
+                let mut default_arm = None;
+                for (arm, label) in sorted_arms.iter().rev() {
+                    if let None = arm {
+                        if default_arm.replace(label).is_some() {
+                            return Err(anyhow!("found duplicated definition of default arm"));
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                let int_arms = &sorted_arms[if default_arm.is_some() { 1 } else { 0 }..];
+                match int_arms
+                    .binary_search_by_key(&cond_val, |(x, _)| (*x).unwrap())
+                    .ok()
+                    .map(|index| &int_arms[index].1)
+                    .or(default_arm)
+                {
+                    Some(label) => {
+                        self.call(label)?;
+                        log!("table match {cond:?} jumps to {label:?} (cond = {cond_val})");
+                    }
+                    None => {
+                        log!("table match {cond:?} didn't jump (cond = {cond_val})");
+                    }
+                };
+            }
+
+            Ir::CmdFmt { args, prefix } => {
+                let mut string = String::new();
                 for arg in args {
                     match arg {
                         FormatArgument::CacheTag(ct) => {
@@ -292,7 +329,7 @@ impl<'a> SimulateMachine<'a> {
                         FormatArgument::Text(t) => string.push_str(t),
                     }
                 }
-                log!("{string}")
+                log!("run formatted `{prefix}` `{string}`")
             }
         }
         Ok(())

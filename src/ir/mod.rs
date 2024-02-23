@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
 };
@@ -10,6 +11,7 @@ use crate::format::FormatStyle;
 
 const PREFIX: &str = "__MCSH_Private";
 const REG_MATCH_ENABLED: &str = formatcp!("{PREFIX}_Flag_MatchEnabled");
+const MCSH_INIT_FUNC: &str = "mcsh_init";
 
 pub mod compile;
 pub mod simulate;
@@ -61,6 +63,17 @@ impl<'a> LabelMap<'a> {
     }
 
     pub fn insert_label(&mut self, label_info: LabelInfo<'a>) -> Result<()> {
+        if matches!(label_info.label, Label::Named {
+            name,
+            export: true,
+        } if name == MCSH_INIT_FUNC)
+        {
+            return Err(anyhow!(
+                "cannot export function `{MCSH_INIT_FUNC}` because \
+                it is reserved as initialization function of MCSH environment"
+            ));
+        }
+
         if self
             .label_map
             .insert(label_info.label, label_info)
@@ -103,7 +116,7 @@ pub enum Ir<'a> {
     Call {
         label: Label<'a>,
     },
-    CmdRaw(&'a str),
+    CmdRaw(Cow<'a, str>),
     Increase {
         dst: CacheTag<'a>,
         value: i32,
@@ -120,12 +133,17 @@ pub enum Ir<'a> {
         rhs: BoolOprRhs<'a>,
     },
     Not {
+        src: CacheTag<'a>,
         dst: CacheTag<'a>,
     },
     Cond {
         positive: bool,
         cond: CacheTag<'a>,
         then: Label<'a>,
+    },
+    Table {
+        cond: CacheTag<'a>,
+        sorted_arms: Vec<(Option<i32>, Label<'a>)>,
     },
     Load {
         mem_offset: CacheTag<'a>,
@@ -140,8 +158,8 @@ pub enum Ir<'a> {
         max: i32,
         min: i32,
     },
-    PrintFmt {
-        target: String,
+    CmdFmt {
+        prefix: String,
         args: Vec<FormatArgument<'a>>,
     },
     SimulationAbort,

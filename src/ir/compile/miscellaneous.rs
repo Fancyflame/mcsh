@@ -189,12 +189,13 @@ pub(super) fn compile_ir<'a>(ir: &'a Ir) -> impl Display + 'a {
             )
         }
 
-        Ir::Not { dst } => {
+        Ir::Not { src, dst } => {
+            let src = compile_cache_tag(*src);
             let dst = compile_cache_tag(*dst);
             writeln!(
                 output,
                 "scoreboard players set MCSH {dst} 0\n\
-                execute if score MCSH {dst} matches 0 run \
+                execute if score MCSH {src} matches 0 run \
                     scoreboard players set MCSH {dst} 1"
             )
         }
@@ -206,8 +207,12 @@ pub(super) fn compile_ir<'a>(ir: &'a Ir) -> impl Display + 'a {
 
         Ir::SimulationAbort => Ok(()),
 
-        Ir::PrintFmt { args, target } => {
-            let mut printer = Printer::new(output, target)?;
+        Ir::Table { .. } => {
+            unreachable!("table ir should manually generate");
+        }
+
+        Ir::CmdFmt { prefix, args } => {
+            let mut printer = Printer::new(output, &prefix)?;
 
             for arg in args {
                 match arg {
@@ -278,8 +283,8 @@ struct Printer<'a, 'f> {
 }
 
 impl<'a, 'f> Printer<'a, 'f> {
-    fn new(output: &'a mut Formatter<'f>, target: &str) -> Result<Self, std::fmt::Error> {
-        write!(output, r#"tellraw {target} {{ "rawtext":[ "#)?;
+    fn new(output: &'a mut Formatter<'f>, prefix: &str) -> Result<Self, std::fmt::Error> {
+        write!(output, r#"{prefix} {{ "rawtext":[ "#)?;
         Ok(Printer {
             is_first: true,
             buffer: String::new(),

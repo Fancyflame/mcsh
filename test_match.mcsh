@@ -1,0 +1,18 @@
+export fn test() {
+    let a = 5;
+    print!{@a, "a{a}"};
+    match a {
+        5 => {
+            print!(@a, "a等于5");
+        },
+        1 => {
+            print!(@a, "a等于1");
+        },
+        3 => {
+            print!(@a, "a等于3");
+        },
+        .. => {
+            print!(@a, "没有匹配成功");
+        }
+    }
+}

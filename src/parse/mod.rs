@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use self::{
     error::McshError,
     lexer::{Lexer, Punct},
@@ -41,6 +39,7 @@ pub enum Stmt<'a> {
     Assign(StmtAssign<'a>),
     While(StmtWhile<'a>),
     If(StmtIf<'a>),
+    Match(StmtMatch<'a>),
     Yield,
     Return(StmtReturn<'a>),
     Break,
@@ -49,6 +48,7 @@ pub enum Stmt<'a> {
     Swap(StmtSwap<'a>),
     Debugger,
     MacroCall(MacroCall<'a>),
+    Def(Definition<'a>),
 }
 
 #[derive(Clone, Debug)]
@@ -96,7 +96,8 @@ pub struct StmtIf<'a> {
 
 #[derive(Clone, Debug)]
 pub struct StmtMatch<'a> {
-    pub map: HashMap<i32, Block<'a>>,
+    pub expr: Expr<'a>,
+    pub sorted_arms: Vec<(Option<i32>, Stmt<'a>)>,
 }
 
 #[derive(Clone, Debug)]

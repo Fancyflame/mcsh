@@ -76,7 +76,7 @@ impl<'a> Atoi<'a> {
         Ok(())
     }
 
-    fn read_constant(&self, expr: &Expr<'a>) -> Result<ConstValue<'a>> {
+    pub(super) fn read_constant(&self, expr: &Expr<'a>) -> Result<ConstValue<'a>> {
         match expr {
             Expr::Integer(int) => Ok(ConstValue::Int(*int)),
             Expr::Binary(ExprBinary { bin_op, lhs, rhs }) => {

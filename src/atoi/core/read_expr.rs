@@ -11,8 +11,8 @@ use crate::{
 };
 
 use super::{
-    convert_bool_opr, convert_opr, macros::macro_not_found, CONST_MINUS_ONE, FRAME_HEAD_LENGTH,
-    REG_CURRENT_MEM_OFFSET, REG_PARENT_MEM_OFFSET, REG_RETURNED_VALUE,
+    convert_bool_opr, convert_opr, macros::macro_not_found, read_def::ConstValue, CONST_MINUS_ONE,
+    FRAME_HEAD_LENGTH, REG_CURRENT_MEM_OFFSET, REG_PARENT_MEM_OFFSET, REG_RETURNED_VALUE,
 };
 
 fn new_reg(cache_offset: &mut u32) -> CacheTag<'static> {
@@ -117,9 +117,11 @@ impl<'a> Atoi<'a> {
             }
 
             Expr::Unary(ExprUnary { op, expr }) => {
-                self.read_expr(expr, insts, dst, cache_offset)?;
                 let ir = match op {
-                    Punct::Bang => Ir::Not { dst },
+                    Punct::Bang => {
+                        let src = self.read_expr_at_next_reg(expr, insts, &mut cache_offset)?;
+                        Ir::Not { src, dst }
+                    }
                     Punct::Minus => Ir::Operation {
                         dst,
                         opr: Operator::Mul,
@@ -205,22 +207,12 @@ impl<'a> Atoi<'a> {
     }
 
     fn require_constant(&self, expr: &Expr) -> Result<i32> {
-        match expr {
-            Expr::Integer(v) => Ok(*v),
-            Expr::Var(name) => {
-                let Some(var) = self.bindings.find_newest(name) else {
-                    return Err(variable_not_found(name));
-                };
-
-                match var {
-                    Binding::Cache(_) => Err(anyhow!(
-                        "only constant value is allowed, but variable `{name}` was found"
-                    )),
-                    Binding::Constant(v) => Ok(*v),
-                    Binding::String(_) => Err(no_string_error()),
-                }
-            }
-            _ => Err(anyhow!("only constant value is allowed")),
+        match self
+            .read_constant(expr)
+            .map_err(|err| anyhow!("only constant value is allowed: {err}"))?
+        {
+            ConstValue::Int(v) => Ok(v),
+            ConstValue::Str(_) => Err(anyhow!("string value is not allowed")),
         }
     }
 
