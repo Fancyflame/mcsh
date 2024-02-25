@@ -26,7 +26,7 @@ export fn test2() {
         }
     }
 }
-/*
+
 export fn test() {
     let a = 6;
     let b = 10;
@@ -56,4 +56,4 @@ export fn test() {
     let result = call(a, b);
     print!(@a, "a: {a}, b: {b}, result: {result}");
     print!(@a, "运算结果是{result}");
-}*/
+}

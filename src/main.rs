@@ -1,4 +1,5 @@
 use std::{
+    env::current_dir,
     fs,
     path::{Path, PathBuf},
 };
@@ -64,7 +65,7 @@ struct BuildArgs {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let file = fs::read_to_string(&cli.input)?;
+    let file = fs::read_to_string(absolute_path(&cli.input)?)?;
     let defs = parse_file(&file)?;
     let mut atoi = Atoi::new();
     atoi.parse(&defs)?;
@@ -73,6 +74,26 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Simulate { function } => start_simulation(&label_map, &function),
         Command::Build(args) => build(&label_map, &cli.input, args),
+    }
+}
+
+fn absolute_path(p: &Path) -> Result<PathBuf> {
+    match current_dir() {
+        Ok(mut dir) => {
+            dir.push(p);
+            Ok(dir)
+        }
+        Err(err) => {
+            if p.is_absolute() {
+                Ok(p.to_path_buf())
+            } else {
+                Err(anyhow!(
+                    "cannot infer the absolute path, \
+                    because the working directory is unable to\
+                    access: {err}"
+                ))
+            }
+        }
     }
 }
 
@@ -86,15 +107,7 @@ fn build(
         pack_icon,
     }: BuildArgs,
 ) -> Result<()> {
-    let out_dir = match out {
-        Some(o) => o,
-        None => {
-            let Some(parent_dir) = file_path.parent() else {
-                return Err(anyhow!("output directory must be specified with this file"));
-            };
-            parent_dir.join("mcsh_out")
-        }
-    };
+    let out_dir = absolute_path(out.as_deref().unwrap_or(Path::new("mcsh_out")))?;
 
     if !out_dir.exists() {
         fs::create_dir_all(&out_dir)?;
