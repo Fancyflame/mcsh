@@ -2,3 +2,4 @@
 /.VSCodeCounter
 /Cargo.lock
 /mcsh_out
+/examples/mcsh_out
